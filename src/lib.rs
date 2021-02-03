@@ -7,6 +7,7 @@ pub mod vm;
 pub mod scanner;
 pub mod compiler;
 pub mod token;
+pub mod util;
 
 pub fn repl() {}
 
