@@ -35,7 +35,9 @@ impl From<TokenType> for Precedence {
         match token_type {
             TokenType::Minus | TokenType::Plus => Precedence::Term,
             TokenType::Slash | TokenType::Star => Precedence::Factor,
-
+            TokenType::BangEqual | TokenType::EqualEqual => Precedence::Equality,
+            TokenType::Greater | TokenType::GreaterEqual => Precedence::Comparison,
+            TokenType::Less | TokenType::LessEqual => Precedence::Comparison,
             _ => Precedence::None
         }
     }
@@ -146,6 +148,27 @@ impl Compiler {
             TokenType::Minus =>self.chunk.add_op_subtract(token.line),
             TokenType::Star => self.chunk.add_op_multily(token.line),
             TokenType::Slash => self.chunk.add_op_divide(token.line),
+            TokenType::BangEqual => {
+                self.chunk.add_op_equal(token.line);
+                self.chunk.add_op_not(token.line);
+            },
+            TokenType::EqualEqual=> {
+                self.chunk.add_op_equal(token.line);
+            },
+            TokenType::Greater => {
+                self.chunk.add_op_greater(token.line);
+            },
+            TokenType::GreaterEqual=>{
+                self.chunk.add_op_less(token.line);
+                self.chunk.add_op_not(token.line);
+            },
+            TokenType::Less => {
+                self.chunk.add_op_less(token.line);
+            },
+            TokenType::LessEqual => {
+                self.chunk.add_op_greater(token.line);
+                self.chunk.add_op_not(token.line);
+            }
             _ => {}
         }
     }
@@ -189,7 +212,9 @@ impl Compiler {
     pub fn parse_infix(&mut self) {
         let token= self.previous.clone();
         match token.token_type {
-            TokenType::Minus | TokenType::Plus | TokenType::Star | TokenType::Slash => self.parse_binary(),
+            TokenType::Minus | TokenType::Plus | TokenType::Star | TokenType::Slash |
+            TokenType::EqualEqual | TokenType::Greater | TokenType::GreaterEqual|
+            TokenType::Less | TokenType::LessEqual => self.parse_binary(),
             _ => {panic!("Error infix parse")}
         }
     }

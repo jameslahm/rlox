@@ -10,12 +10,47 @@ pub enum Value {
     Nil,
 }
 
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Value::Bool(v) => {
+                let other_boolean:bool = other.to_owned().into();
+                *v == other_boolean
+            }
+            Value::Double(f) => {
+                let other_f:f64 = other.to_owned().into();
+                *f == other_f
+            }
+            Value::Nil => {
+                if let Value::Nil = other {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+}
+
+
 impl From<Value> for bool {
     fn from(value: Value) -> Self {
         match value {
             Value::Bool(v) => v,
             Value::Nil => false,
             _ => true
+        }
+    }
+}
+
+
+
+impl From<Value> for f64 {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Double(f)=>f,
+            Value::Bool(v) => (v as i32) as f64,
+            Value::Nil => 0.0
         }
     }
 }
@@ -117,4 +152,20 @@ impl Chunk {
         self.codes.push(OpCode::OpNot);
         self.lines.push(line);
     }
+
+    pub fn add_op_equal(&mut self,line:i32){
+        self.codes.push(OpCode::OpEqual);
+        self.lines.push(line);
+    }
+
+    pub fn add_op_greater(&mut self,line:i32){
+        self.codes.push(OpCode::OpGreater);
+        self.lines.push(line);
+    }
+
+    pub fn add_op_less(&mut self,line:i32){
+        self.codes.push(OpCode::OpLess);
+        self.lines.push(line);
+    }
+
 }

@@ -1,6 +1,6 @@
 use std::result;
 
-use crate::chunk::{Chunk, Value};
+use crate::{binary_op, chunk::{Chunk, Value}};
 use crate::error;
 use crate::op_code::OpCode;
 
@@ -46,56 +46,16 @@ impl<'a> VM<'a> {
                     }
                 }
                 OpCode::OpAdd => {
-                    if let Value::Double(right_v) = self.peek(0) {
-                        if let Value::Double(left_v) = self.peek(1) {
-                            // Pop values
-                            self.get_stack_value()?;
-                            self.get_stack_value()?;
-
-                            self.stack.push(Value::Double(left_v + right_v));
-                            continue;
-                        }
-                    }
-                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                    binary_op!(self,Double,+);
                 }
                 OpCode::OpSubtract => {
-                    if let Value::Double(right_v) = self.peek(0) {
-                        if let Value::Double(left_v) = self.peek(1) {
-                            // Pop values
-                            self.get_stack_value()?;
-                            self.get_stack_value()?;
-
-                            self.stack.push(Value::Double(left_v - right_v));
-                            continue;
-                        }
-                    }
-                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                    binary_op!(self,Double,-);
                 }
                 OpCode::OpMultiply => {
-                    if let Value::Double(right_v) = self.peek(0) {
-                        if let Value::Double(left_v) = self.peek(1) {
-                            // Pop values
-                            self.get_stack_value()?;
-                            self.get_stack_value()?;
-
-                            self.stack.push(Value::Double(left_v * right_v));
-                            continue;
-                        }
-                    }
-                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                    binary_op!(self,Double,*);
                 }
                 OpCode::OpDivide => {
-                    if let Value::Double(right_v) = self.peek(0) {
-                        if let Value::Double(left_v) = self.peek(1) {
-                            self.stack.push(Value::Double(left_v / right_v));
-                            // Pop values
-                            self.get_stack_value()?;
-                            self.get_stack_value()?;
-
-                            continue;
-                        }
-                    }
-                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                    binary_op!(self,Double,/);
                 }
                 OpCode::OpNil => {
                     self.stack.push(Value::Nil);
@@ -110,7 +70,18 @@ impl<'a> VM<'a> {
                     let boolean:bool = self.get_stack_value()?.into();
                     self.stack.push(Value::Bool(boolean));
                 }
-                _ => println!("Executing {}", code),
+                OpCode::OpEqual => {
+                    let left_value = self.get_stack_value()?;
+                    let right_value=self.get_stack_value()?;
+                    self.stack.push(Value::Bool(left_value==right_value));
+                }
+                OpCode::OpGreater => {
+                    binary_op!(self,Bool,>);
+                }
+                OpCode::OpLess =>{
+                    binary_op!(self,Bool,<);
+                }
+                // _ => println!("Executing {}", code),
             }
         }
 

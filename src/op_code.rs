@@ -1,5 +1,7 @@
 use std::fmt;
 
+use fmt::write;
+
 #[derive(Debug)]
 pub enum OpCode {
     OpReturn,
@@ -13,6 +15,9 @@ pub enum OpCode {
     OpTrue,
     OpFalse,
     OpNot,
+    OpEqual,
+    OpGreater,
+    OpLess
 }
 
 impl fmt::Display for OpCode {
@@ -28,7 +33,10 @@ impl fmt::Display for OpCode {
             OpCode::OpNil => write!(f,"OpNil"),
             OpCode::OpTrue =>write!(f,"OpTrue"),
             OpCode::OpFalse =>write!(f,"OpFalse"),
-            OpCode::OpNot =>write!(f,"OpNot")
+            OpCode::OpNot =>write!(f,"OpNot"),
+            OpCode::OpEqual =>write!(f,"OpEqual"),
+            OpCode::OpGreater =>write!(f,"OpGreater"),
+            OpCode::OpLess => write!(f, "OpLess"),
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }
