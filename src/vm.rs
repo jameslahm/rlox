@@ -39,27 +39,76 @@ impl<'a> VM<'a> {
                 }
                 OpCode::OpNegate => {
                     let value = self.get_stack_value()?;
-                    self.stack.push(-value);
+                    if let Value::Double(v) = value {
+                        self.stack.push(Value::Double(-v))
+                    } else {
+                        return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                    }
                 }
                 OpCode::OpAdd => {
-                    let right_value = self.get_stack_value()?;
-                    let left_value = self.get_stack_value()?;
-                    self.stack.push(left_value + right_value);
+                    if let Value::Double(right_v) = self.peek(0) {
+                        if let Value::Double(left_v) = self.peek(1) {
+                            // Pop values
+                            self.get_stack_value()?;
+                            self.get_stack_value()?;
+
+                            self.stack.push(Value::Double(left_v + right_v));
+                            continue;
+                        }
+                    }
+                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
                 }
                 OpCode::OpSubtract => {
-                    let right_value = self.get_stack_value()?;
-                    let left_value = self.get_stack_value()?;
-                    self.stack.push(left_value - right_value);
+                    if let Value::Double(right_v) = self.peek(0) {
+                        if let Value::Double(left_v) = self.peek(1) {
+                            // Pop values
+                            self.get_stack_value()?;
+                            self.get_stack_value()?;
+
+                            self.stack.push(Value::Double(left_v - right_v));
+                            continue;
+                        }
+                    }
+                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
                 }
                 OpCode::OpMultiply => {
-                    let right_value = self.get_stack_value()?;
-                    let left_value = self.get_stack_value()?;
-                    self.stack.push(left_value * right_value);
+                    if let Value::Double(right_v) = self.peek(0) {
+                        if let Value::Double(left_v) = self.peek(1) {
+                            // Pop values
+                            self.get_stack_value()?;
+                            self.get_stack_value()?;
+
+                            self.stack.push(Value::Double(left_v * right_v));
+                            continue;
+                        }
+                    }
+                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
                 }
                 OpCode::OpDivide => {
-                    let right_value = self.get_stack_value()?;
-                    let left_value = self.get_stack_value()?;
-                    self.stack.push(left_value / right_value);
+                    if let Value::Double(right_v) = self.peek(0) {
+                        if let Value::Double(left_v) = self.peek(1) {
+                            self.stack.push(Value::Double(left_v / right_v));
+                            // Pop values
+                            self.get_stack_value()?;
+                            self.get_stack_value()?;
+
+                            continue;
+                        }
+                    }
+                    return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+                }
+                OpCode::OpNil => {
+                    self.stack.push(Value::Nil);
+                }
+                OpCode::OpTrue => {
+                    self.stack.push(Value::Bool(true));
+                }
+                OpCode::OpFalse => {
+                    self.stack.push(Value::Bool(false));
+                }
+                OpCode::OpNot => {
+                    let boolean:bool = self.get_stack_value()?.into();
+                    self.stack.push(Value::Bool(boolean));
                 }
                 _ => println!("Executing {}", code),
             }
@@ -74,7 +123,17 @@ impl<'a> VM<'a> {
         }
         println!()
     }
-    pub fn get_stack_value(&mut self)-> Result<Value> {
-        self.stack.pop().ok_or(VmError::RuntimeError(error::EMPTY_STACK))
+    pub fn get_stack_value(&mut self) -> Result<Value> {
+        self.stack
+            .pop()
+            .ok_or(VmError::RuntimeError(error::EMPTY_STACK))
+    }
+
+    pub fn peek(&self, distance: usize) -> Value {
+        let stack_len = self.stack.len();
+        if stack_len < distance + 1 {
+            panic!("Error peek stack")
+        }
+        self.stack[self.stack.len() - 1 - distance]
     }
 }

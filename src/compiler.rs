@@ -1,4 +1,5 @@
-use std::ops::Add;
+use core::{panic};
+use std::{ops::Add};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;    
 
@@ -29,6 +30,17 @@ impl Add<i32> for Precedence {
     }
 }
 
+impl From<TokenType> for Precedence {
+    fn from(token_type:TokenType) -> Self {
+        match token_type {
+            TokenType::Minus | TokenType::Plus => Precedence::Term,
+            TokenType::Slash | TokenType::Star => Precedence::Factor,
+
+            _ => Precedence::None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ParseError {
     TokenError,
@@ -56,8 +68,10 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&self) {
-    
+    pub fn compile(&mut self) {
+        self.advance();
+        self.expression();
+        self.consume(TokenType::Eof, error::EXPECT_EOF);
     }
 
     pub fn advance(&mut self) {
@@ -73,6 +87,10 @@ impl Compiler {
     }
 
     pub fn show_error(&mut self, token: Token,message:&str) {
+        if self.panic_mode{
+            return;
+        }
+        self.panic_mode = true;
         print!("[lint {}] Error: ", token.line);
 
         match token.token_type {
@@ -92,7 +110,8 @@ impl Compiler {
     }
 
     pub fn parse_number(&mut self){
-        let value:Value = self.previous.lexeme.parse().unwrap_or(0.0);
+        let v:f64 = self.previous.lexeme.parse().unwrap_or(0.0);
+        let value = Value::Double(v);
         self.chunk.add_op_constant(value, self.previous.line);
     }
 
@@ -108,6 +127,9 @@ impl Compiler {
         match token.token_type {
             TokenType::Minus => {
                 self.chunk.add_op_negate(token.line);
+            },
+            TokenType::Bang => {
+                self.chunk.add_op_not(token.line);
             }
             _ => {}
         }
@@ -117,12 +139,58 @@ impl Compiler {
     pub fn parse_binary(&mut self){
         let token:Token = self.previous.clone();
 
+        let precedence:Precedence = token.token_type.into();
+        self.parse_precedence(precedence);
+        match token.token_type {
+            TokenType::Plus => self.chunk.add_op_add(token.line),
+            TokenType::Minus =>self.chunk.add_op_subtract(token.line),
+            TokenType::Star => self.chunk.add_op_multily(token.line),
+            TokenType::Slash => self.chunk.add_op_divide(token.line),
+            _ => {}
+        }
+    }
 
+    pub fn parse_literal(&mut self){
+        let token = self.previous.clone();
+        match token.token_type {
+            TokenType::False => self.chunk.add_op_false(token.line),
+            TokenType::True => self.chunk.add_op_true(token.line),
+            TokenType::Nil => self.chunk.add_op_nil(token.line),
+            _ => {}
+        }
     }
 
     pub fn expression(&mut self){
         self.parse_precedence(Precedence::Assignment);
     }
 
-    pub fn parse_precedence(&self, precedence: Precedence) {}
+    pub fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
+
+        self.parse_prefix();
+
+        while precedence <= Precedence::from(self.current.token_type) {
+            self.advance();
+            self.parse_infix();
+        }
+    }
+
+    pub fn parse_prefix(&mut self) {
+        let token = self.previous.clone();
+        match token.token_type {
+            TokenType::LeftParen => self.parse_group(),
+            TokenType::Minus => self.parse_unary(),
+            TokenType::Number => self.parse_number(),
+            TokenType::True | TokenType::False | TokenType::Nil =>self.parse_literal(),
+            _ => {panic!("Error prefix parse")}
+        }
+    }
+
+    pub fn parse_infix(&mut self) {
+        let token= self.previous.clone();
+        match token.token_type {
+            TokenType::Minus | TokenType::Plus | TokenType::Star | TokenType::Slash => self.parse_binary(),
+            _ => {panic!("Error infix parse")}
+        }
+    }
 }

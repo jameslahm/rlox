@@ -8,7 +8,11 @@ pub enum OpCode {
     OpAdd,
     OpSubtract,
     OpMultiply,
-    OpDivide
+    OpDivide,
+    OpNil,
+    OpTrue,
+    OpFalse,
+    OpNot,
 }
 
 impl fmt::Display for OpCode {
@@ -21,7 +25,11 @@ impl fmt::Display for OpCode {
             OpCode::OpSubtract => write!(f,"OpSubtract"),
             OpCode::OpMultiply => write!(f,"OpMultiply"),
             OpCode::OpDivide => write!(f,"OpDivide"),
-            _ => write!(f, "Unknown OpCode...\n"),
+            OpCode::OpNil => write!(f,"OpNil"),
+            OpCode::OpTrue =>write!(f,"OpTrue"),
+            OpCode::OpFalse =>write!(f,"OpFalse"),
+            OpCode::OpNot =>write!(f,"OpNot")
+            // _ => write!(f, "Unknown OpCode...\n"),
         }
     }
 }

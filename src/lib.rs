@@ -1,5 +1,7 @@
 use std::{fs::File, io::Read};
 
+use compiler::Compiler;
+
 pub mod chunk;
 pub mod error;
 pub mod op_code;
@@ -15,7 +17,8 @@ pub fn run_file(filename: &String) {
     let mut file = File::open(filename).expect(format!("Could not open file {}\n", filename).as_str());
     let mut buf = String::new();
     file.read_to_string(&mut buf).expect("Could not read file");
-
+    let compiler = Compiler::new(buf);
+    compiler.chunk.disassemble("Code");
 }
 
 #[cfg(test)]
