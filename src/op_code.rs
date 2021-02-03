@@ -4,6 +4,11 @@ use std::fmt;
 pub enum OpCode {
     OpReturn,
     OpConstant(usize),
+    OpNegate,
+    OpAdd,
+    OpSubtract,
+    OpMultiply,
+    OpDivide
 }
 
 impl fmt::Display for OpCode {
@@ -11,7 +16,12 @@ impl fmt::Display for OpCode {
         match self {
             OpCode::OpReturn => write!(f, "OpReturn"),
             OpCode::OpConstant(i) => write!(f, "OpConstant {}", i),
-            _ => write!(f,"Unknown OpCode...\n")
+            OpCode::OpNegate => write!(f,"OpNegate"),
+            OpCode::OpAdd =>write!(f,"OpAdd"),
+            OpCode::OpSubtract => write!(f,"OpSubtract"),
+            OpCode::OpMultiply => write!(f,"OpMultiply"),
+            OpCode::OpDivide => write!(f,"OpDivide"),
+            _ => write!(f, "Unknown OpCode...\n"),
         }
     }
 }

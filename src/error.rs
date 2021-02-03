@@ -1,0 +1,1 @@
+pub const EMPTY_STACK: &str = "Error: empty stack";

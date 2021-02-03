@@ -1,6 +1,6 @@
 use crate::op_code::OpCode;
 
-type Value = f64;
+pub type Value = f64;
 
 pub struct Chunk {
     pub codes: Vec<OpCode>,
@@ -12,10 +12,10 @@ impl Chunk {
     pub fn disassemble(&self, name: &str) {
         println!("== {} ==\n", name);
         for (index, code) in self.codes.iter().enumerate() {
-            self.dis
+            self.disassemble_op_code(code, index);
         }
     }
-    pub fn disassemble_op_code(&self,code:&OpCode,index:usize){
+    pub fn disassemble_op_code(&self, code: &OpCode, index: usize) {
         print!("{:04}  ", index);
 
         if index > 0 && self.lines[index] == self.lines[index - 1] {
@@ -31,9 +31,9 @@ impl Chunk {
     pub fn add_op_return(&mut self) {
         self.codes.push(OpCode::OpReturn);
     }
-    pub fn add_op_constant(&mut self,value:Value){
+    pub fn add_op_constant(&mut self, value: Value) {
         self.values.push(value);
-        let index = self.values.len()-1;
+        let index = self.values.len() - 1;
         self.codes.push(OpCode::OpConstant(index));
     }
 }
