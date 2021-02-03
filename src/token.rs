@@ -1,9 +1,11 @@
-pub struct Token<'a> {
-    pub token_type:TokenType,
-    pub lexeme:&'a str,
-    pub line:usize
+#[derive(Debug,Clone)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub line: i32,
 }
 
+#[derive(Debug,Clone, Copy,PartialEq)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -45,15 +47,22 @@ pub enum TokenType {
     EqualEqual,
 
     Error,
-    Eof
+    Eof,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(token_type:TokenType,lexeme:&'a str,line:usize)->Token {
+impl<'a> Token {
+    pub fn new(token_type: TokenType, lexeme: &'a str, line: i32) -> Token {
         Token {
-            token_type:token_type,
-            lexeme:lexeme,
-            line:line,
+            token_type: token_type,
+            lexeme: lexeme.to_owned(),
+            line: line,
+        }
+    }
+    pub fn default() -> Token {
+        Token {
+            token_type: TokenType::Error,
+            lexeme: String::from(""),
+            line: 0,
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::vec;
+
 use crate::op_code::OpCode;
 
 pub type Value = f64;
@@ -9,6 +11,13 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn new()->Self {
+        Chunk {
+            codes:vec![],
+            values:vec![],
+            lines:vec![]
+        }
+    }
     pub fn disassemble(&self, name: &str) {
         println!("== {} ==\n", name);
         for (index, code) in self.codes.iter().enumerate() {
@@ -28,12 +37,18 @@ impl Chunk {
             _ => println!("{}", code),
         }
     }
-    pub fn add_op_return(&mut self) {
+    pub fn add_op_return(&mut self,line:i32) {
         self.codes.push(OpCode::OpReturn);
+        self.lines.push(line);
     }
-    pub fn add_op_constant(&mut self, value: Value) {
+    pub fn add_op_constant(&mut self, value: Value,line:i32) {
         self.values.push(value);
         let index = self.values.len() - 1;
         self.codes.push(OpCode::OpConstant(index));
+        self.lines.push(line);
+    }
+    pub fn add_op_negate(&mut self,line:i32){
+        self.codes.push(OpCode::OpNegate);
+        self.lines.push(line);
     }
 }

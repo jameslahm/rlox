@@ -1,15 +1,14 @@
-use crate::token::{self, Token, TokenType};
-use crete::util;
+use crate::{token::{Token, TokenType}, util};
 
-pub struct Scanner<'a> {
-    pub source: &'a String,
+pub struct Scanner {
+    pub source: String,
     pub current: usize,
     pub start: usize,
-    pub line: usize,
+    pub line: i32,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a String) -> Scanner {
+impl Scanner {
+    pub fn new(source: String) -> Scanner {
         Scanner {
             source: source,
             current: 0,
