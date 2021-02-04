@@ -1,56 +1,45 @@
-use std::fmt::{Formatter, Result};
+use std::{fmt::{Formatter, Result}, rc::Rc};
 use std::{fmt::Display, vec};
 
 use crate::op_code::OpCode;
 
-#[derive(Debug,Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Bool(bool),
     Double(f64),
     Nil,
+    String(Rc<String>),
 }
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        match self {
-            Value::Bool(v) => {
-                let other_boolean:bool = other.to_owned().into();
-                *v == other_boolean
-            }
-            Value::Double(f) => {
-                let other_f:f64 = other.to_owned().into();
-                *f == other_f
-            }
-            Value::Nil => {
-                if let Value::Nil = other {
-                    true
-                } else {
-                    false
-                }
-            }
+        match (self, other) {
+            (Value::Bool(left_v), Value::Bool(right_v)) => left_v == right_v,
+            (Value::Double(left_v), Value::Double(right_v)) => left_v == right_v,
+            (Value::Nil, Value::Nil) => true,
+            (Value::String(left_v), Value::String(right_v)) => left_v == right_v,
+            _ => false,
         }
     }
 }
-
 
 impl From<Value> for bool {
     fn from(value: Value) -> Self {
         match value {
             Value::Bool(v) => v,
             Value::Nil => false,
-            _ => true
+            _ => true,
         }
     }
 }
 
-
-
 impl From<Value> for f64 {
     fn from(value: Value) -> Self {
         match value {
-            Value::Double(f)=>f,
+            Value::Double(f) => f,
             Value::Bool(v) => (v as i32) as f64,
-            Value::Nil => 0.0
+            Value::Nil => 0.0,
+            _ => 0.0,
         }
     }
 }
@@ -61,6 +50,7 @@ impl Display for Value {
             Value::Bool(v) => write!(f, "Bool {}", v),
             Value::Double(v) => write!(f, "Double {}", v),
             Value::Nil => write!(f, "Nil"),
+            Value::String(b) => write!(f, "{}", b),
         }
     }
 }
@@ -133,39 +123,38 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    pub fn add_op_false(&mut self,line: i32){
+    pub fn add_op_false(&mut self, line: i32) {
         self.codes.push(OpCode::OpFalse);
         self.lines.push(line);
     }
 
-    pub fn add_op_true(&mut self,line: i32) {
+    pub fn add_op_true(&mut self, line: i32) {
         self.codes.push(OpCode::OpTrue);
         self.lines.push(line);
     }
 
-    pub fn add_op_nil(&mut self,line:i32){
+    pub fn add_op_nil(&mut self, line: i32) {
         self.codes.push(OpCode::OpNil);
         self.lines.push(line);
     }
 
-    pub fn add_op_not(&mut self,line:i32){
+    pub fn add_op_not(&mut self, line: i32) {
         self.codes.push(OpCode::OpNot);
         self.lines.push(line);
     }
 
-    pub fn add_op_equal(&mut self,line:i32){
+    pub fn add_op_equal(&mut self, line: i32) {
         self.codes.push(OpCode::OpEqual);
         self.lines.push(line);
     }
 
-    pub fn add_op_greater(&mut self,line:i32){
+    pub fn add_op_greater(&mut self, line: i32) {
         self.codes.push(OpCode::OpGreater);
         self.lines.push(line);
     }
 
-    pub fn add_op_less(&mut self,line:i32){
+    pub fn add_op_less(&mut self, line: i32) {
         self.codes.push(OpCode::OpLess);
         self.lines.push(line);
     }
-
 }

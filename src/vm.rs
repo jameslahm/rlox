@@ -1,8 +1,12 @@
+use std::rc::Rc;
 use std::result;
 
-use crate::{binary_op, chunk::{Chunk, Value}};
 use crate::error;
 use crate::op_code::OpCode;
+use crate::{
+    binary_op,
+    chunk::{Chunk, Value},
+};
 
 pub struct VM<'a> {
     pub chunk: &'a Chunk,
@@ -34,7 +38,7 @@ impl<'a> VM<'a> {
                     return Ok(());
                 }
                 OpCode::OpConstant(index) => {
-                    let value = self.chunk.values[*index];
+                    let value = self.chunk.values[*index].clone();
                     self.stack.push(value);
                 }
                 OpCode::OpNegate => {
@@ -46,6 +50,16 @@ impl<'a> VM<'a> {
                     }
                 }
                 OpCode::OpAdd => {
+                    if let Value::String(left_v) = self.peek(0) {
+                        if let Value::String(right_v) = self.peek(1) {
+                            self.get_stack_value()?;
+                            self.get_stack_value()?;
+                            
+                            
+                            self.stack.push(Value::String(Rc::new((*left_v).clone() + &right_v)));
+                            continue;
+                        }
+                    }
                     binary_op!(self,Double,+);
                 }
                 OpCode::OpSubtract => {
@@ -67,21 +81,20 @@ impl<'a> VM<'a> {
                     self.stack.push(Value::Bool(false));
                 }
                 OpCode::OpNot => {
-                    let boolean:bool = self.get_stack_value()?.into();
+                    let boolean: bool = self.get_stack_value()?.into();
                     self.stack.push(Value::Bool(boolean));
                 }
                 OpCode::OpEqual => {
                     let left_value = self.get_stack_value()?;
-                    let right_value=self.get_stack_value()?;
-                    self.stack.push(Value::Bool(left_value==right_value));
+                    let right_value = self.get_stack_value()?;
+                    self.stack.push(Value::Bool(left_value == right_value));
                 }
                 OpCode::OpGreater => {
                     binary_op!(self,Bool,>);
                 }
-                OpCode::OpLess =>{
+                OpCode::OpLess => {
                     binary_op!(self,Bool,<);
-                }
-                // _ => println!("Executing {}", code),
+                } // _ => println!("Executing {}", code),
             }
         }
 
@@ -105,6 +118,6 @@ impl<'a> VM<'a> {
         if stack_len < distance + 1 {
             panic!("Error peek stack")
         }
-        self.stack[self.stack.len() - 1 - distance]
+        self.stack[self.stack.len() - 1 - distance].clone()
     }
 }

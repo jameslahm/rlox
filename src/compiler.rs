@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use core::{panic};
 use std::{ops::Add};
 use num::FromPrimitive;
@@ -187,6 +188,11 @@ impl Compiler {
         self.parse_precedence(Precedence::Assignment);
     }
 
+    pub fn parse_string(&mut self){
+        let token = self.previous.clone();
+        self.chunk.add_op_constant(Value::String(Rc::new(token.lexeme)),token.line);
+    }
+
     pub fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
 
@@ -205,6 +211,7 @@ impl Compiler {
             TokenType::Minus => self.parse_unary(),
             TokenType::Number => self.parse_number(),
             TokenType::True | TokenType::False | TokenType::Nil =>self.parse_literal(),
+            TokenType::String => self.parse_string(),
             _ => {panic!("Error prefix parse")}
         }
     }

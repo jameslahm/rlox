@@ -1,6 +1,6 @@
 use std::fmt;
 
-use fmt::write;
+
 
 #[derive(Debug)]
 pub enum OpCode {
