@@ -30,9 +30,11 @@ impl<'a> VM<'a> {
         }
     }
     pub fn interpret(&mut self) -> Result<()> {
-        for (index, code) in self.chunk.codes.iter().enumerate() {
+        let code_index = 0;
+        while code_index < self.chunk.codes.len() {
+            let code = &self.chunk.codes[code_index];
             self.show_stack();
-            self.chunk.disassemble_op_code(code, index);
+            self.chunk.disassemble_op_code(code, code_index);
             match code {
                 OpCode::OpReturn => {}
                 OpCode::OpConstant(index) => {
@@ -44,7 +46,9 @@ impl<'a> VM<'a> {
                     if let Value::Double(v) = value {
                         self.stack.push(Value::Double(-v))
                     } else {
-                        return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER.to_owned()));
+                        return Err(VmError::RuntimeError(
+                            error::OPERAND_MUST_BE_NUMBER.to_owned(),
+                        ));
                     }
                 }
                 OpCode::OpAdd => {
@@ -55,10 +59,10 @@ impl<'a> VM<'a> {
 
                             self.stack
                                 .push(Value::String(Rc::new((*left_v).clone() + &right_v)));
-                            continue;
                         }
+                    } else {
+                        binary_op!(self,Double,+);
                     }
-                    binary_op!(self,Double,+);
                 }
                 OpCode::OpSubtract => {
                     binary_op!(self,Double,-);
@@ -105,18 +109,60 @@ impl<'a> VM<'a> {
                         let value = self.get_stack_value()?;
                         self.globals.insert((*name).clone(), value);
                     } else {
-                        panic!("Warn OpDefineGlobal should be string")
+                        panic!(error::WARN_GLOBAL_BE_STRING);
                     }
                 }
                 OpCode::OpGetGlobal(index) => {
                     let name_value = self.chunk.values[*index].clone();
                     if let Value::String(name) = name_value {
                         let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
-                        // let value = self.globals.get(&(*name)).ok_or(VmError::RuntimeError(
-                        //     &message))?;
+                        let value = self
+                            .globals
+                            .get(&(*name))
+                            .ok_or(VmError::RuntimeError(message))?;
+                        self.stack.push(value.clone());
+                    } else {
+                        panic!(error::WARN_GLOBAL_BE_STRING);
                     }
                 }
+                OpCode::OpSetGlobal(index) => {
+                    let name_value = self.chunk.values[*index].clone();
+                    if let Value::String(name) = name_value {
+                        let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
+                        let assign_value = self.get_stack_value()?;
+                        let value = self
+                            .globals
+                            .get_mut(&(*name))
+                            .ok_or(VmError::RuntimeError(message))?;
+                        *value = assign_value;
+                        self.stack.push(value.clone());
+                    } else {
+                        panic!(error::WARN_GLOBAL_BE_STRING);
+                    }
+                }
+                OpCode::OpGetLocal(index) => {
+                    self.stack.push(self.stack[*index].clone());
+                }
+                OpCode::OpSetLocal(index) => {
+                    self.stack[*index] = self.peek(0);
+                }
+                OpCode::OpJumpIfFalse(index)=>{
+                    let boolean:bool = self.peek(0).into();
+                    if !boolean {
+                        code_index+=index;
+                        continue;
+                    }
+                }
+                OpCode::OpJump(index)=>{
+                    code_index += index;
+                    continue;
+                }
+                OpCode::OpLoop(index)=>{
+                    code_index -= index;
+                    continue;
+                }
             }
+            code_index += 1;
         }
 
         Ok(())

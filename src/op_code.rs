@@ -2,7 +2,7 @@ use std::fmt;
 
 
 
-#[derive(Debug)]
+#[derive(Debug,Clone, Copy)]
 pub enum OpCode {
     OpReturn,
     OpConstant(usize),
@@ -21,7 +21,13 @@ pub enum OpCode {
     OpPrint,
     OpPop,
     OpDefineGlobal(usize),
-    OpGetGlobal(usize)
+    OpGetGlobal(usize),
+    OpSetGlobal(usize),
+    OpGetLocal(usize),
+    OpSetLocal(usize),
+    OpJumpIfFalse(usize),
+    OpJump(usize),
+    OpLoop(usize)
 }
 
 impl fmt::Display for OpCode {
@@ -44,7 +50,13 @@ impl fmt::Display for OpCode {
             OpCode::OpPrint => write!(f,"OpPrint"),
             OpCode::OpPop => write!(f,"OpPop"),
             OpCode::OpDefineGlobal(_)=>write!(f,"OpDefineGlobal"),
-            OpCode::OpGetGlobal(_) => write!(f,"OpGetGloabl")
+            OpCode::OpGetGlobal(_) => write!(f,"OpGetGloabl"),
+            OpCode::OpSetGlobal(_)=>write!(f,"OpSetGlobal"),
+            OpCode::OpGetLocal(_) =>write!(f,"OpGetLocal"),
+            OpCode::OpSetLocal(_) => write!(f,"OpSetLocal"),
+            OpCode::OpJumpIfFalse(_)=>write!(f,"OpJumpIfFalse"),
+            OpCode::OpJump(_) =>write!(f,"OpJump"),
+            OpCode::OpLoop(_) =>write!(f,"OpLoop")
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }

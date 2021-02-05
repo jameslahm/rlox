@@ -1,5 +1,8 @@
-use std::{fmt::{Formatter, Result}, rc::Rc};
 use std::{fmt::Display, vec};
+use std::{
+    fmt::{Formatter, Result},
+    rc::Rc,
+};
 
 use crate::op_code::OpCode;
 
@@ -158,23 +161,61 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    pub fn add_op_print(&mut self,line:i32){
+    pub fn add_op_print(&mut self, line: i32) {
         self.codes.push(OpCode::OpPrint);
         self.lines.push(line);
     }
 
-    pub fn add_op_define_global(&mut self,index:usize,line:i32){
+    pub fn add_op_define_global(&mut self, index: usize, line: i32) {
         self.codes.push(OpCode::OpDefineGlobal(index));
         self.lines.push(line);
     }
 
-    pub fn add_value(&mut self,value: Value) -> usize {
+    pub fn add_value(&mut self, value: Value) -> usize {
         self.values.push(value);
-        self.values.len()-1
+        self.values.len() - 1
     }
 
-    pub fn add_op_get_global(&mut self,index:usize,line:i32){
+    pub fn add_op_get_global(&mut self, index: usize, line: i32) {
         self.codes.push(OpCode::OpGetGlobal(index));
         self.lines.push(line);
+    }
+
+    pub fn add_op_set_global(&mut self, index: usize, line: i32) {
+        self.codes.push(OpCode::OpSetGlobal(index));
+        self.lines.push(line);
+    }
+
+    pub fn add_op_pop(&mut self, line: i32) {
+        self.codes.push(OpCode::OpPop);
+        self.lines.push(line);
+    }
+
+    pub fn add_op_get_local(&mut self, index: usize, line: i32) {
+        self.codes.push(OpCode::OpGetLocal(index));
+        self.lines.push(line);
+    }
+
+    pub fn add_op_set_local(&mut self, index: usize, line: i32) {
+        self.codes.push(OpCode::OpSetLocal(index));
+        self.lines.push(line);
+    }
+
+    pub fn add_op_juml_if_false(&mut self, index: usize, line: i32) -> usize {
+        self.codes.push(OpCode::OpJumpIfFalse(index));
+        self.lines.push(line);
+        return self.codes.len() - 1;
+    }
+
+    pub fn add_op_jump(&mut self, index: usize, line: i32) -> usize {
+        self.codes.push(OpCode::OpJump(index));
+        self.lines.push(line);
+        return self.codes.len() - 1;
+    }
+
+    pub fn add_op_loop(&mut self,index: usize,line: i32) -> usize {
+        self.codes.push(OpCode::OpLoop(index));
+        self.lines.push(line);
+        return self.codes.len() - 1;
     }
 }
