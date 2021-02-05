@@ -17,7 +17,11 @@ pub enum OpCode {
     OpNot,
     OpEqual,
     OpGreater,
-    OpLess
+    OpLess,
+    OpPrint,
+    OpPop,
+    OpDefineGlobal(usize),
+    OpGetGlobal(usize)
 }
 
 impl fmt::Display for OpCode {
@@ -37,6 +41,10 @@ impl fmt::Display for OpCode {
             OpCode::OpEqual =>write!(f,"OpEqual"),
             OpCode::OpGreater =>write!(f,"OpGreater"),
             OpCode::OpLess => write!(f, "OpLess"),
+            OpCode::OpPrint => write!(f,"OpPrint"),
+            OpCode::OpPop => write!(f,"OpPop"),
+            OpCode::OpDefineGlobal(_)=>write!(f,"OpDefineGlobal"),
+            OpCode::OpGetGlobal(_) => write!(f,"OpGetGloabl")
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }

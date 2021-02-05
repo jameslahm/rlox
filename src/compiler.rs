@@ -2,7 +2,8 @@ use std::rc::Rc;
 use core::{panic};
 use std::{ops::Add};
 use num::FromPrimitive;
-use num_derive::FromPrimitive;    
+use num_derive::FromPrimitive;
+use num_traits::float::FloatCore;    
 
 use crate::{chunk::{Chunk, Value}, error, scanner::Scanner, token::{Token, TokenType}};
 
@@ -73,7 +74,9 @@ impl Compiler {
 
     pub fn compile(&mut self) {
         self.advance();
-        self.expression();
+        while !self.match_token(TokenType::Eof){
+            self.parse_declaration();
+        }
         self.consume(TokenType::Eof, error::EXPECT_EOF);
     }
 
@@ -119,7 +122,7 @@ impl Compiler {
     }
 
     pub fn parse_group(&mut self){
-        self.expression();
+        self.parse_expression();
         self.consume(TokenType::RightParen, error::EXPECT_RIGHT_PAREN_AFTER_EXPRESSION);    
     }
 
@@ -184,7 +187,7 @@ impl Compiler {
         }
     }
 
-    pub fn expression(&mut self){
+    pub fn parse_expression(&mut self){
         self.parse_precedence(Precedence::Assignment);
     }
 
@@ -204,6 +207,82 @@ impl Compiler {
         }
     }
 
+    pub fn parse_statement(&mut self){
+        match self.current.token_type {
+            TokenType::Print => {
+                self.advance();
+                self.parse_print_statement();
+            },
+            _ => self.parse_expression_statement()
+        }
+    }
+
+    pub fn parse_expression_statement(&mut self){
+        self.parse_expression();
+        self.consume(TokenType::SemiColon,error::EXPECT_SEMICOLON_AFTER_EXPRESSION);
+        
+    }
+
+    pub fn parse_print_statement(&mut self){
+        self.parse_expression();
+        self.consume(TokenType::SemiColon,error::EXPECT_SEMICOLON_AFTER_VALUE);
+
+        let token = self.previous.clone();
+        self.chunk.add_op_print(token.line);
+    }
+
+    pub fn parse_var_declaration(&mut self){
+        self.consume(TokenType::Identifier, error::EXPECT_VARIABLE_NAME);
+        let token = self.previous.clone();
+        let index= self.chunk.add_value(Value::String(Rc::new(token.lexeme)));
+        if self.match_token(TokenType::Equal){
+            self.parse_expression();
+        } else {
+            self.chunk.add_op_nil(token.line);
+        }
+
+        self.consume(TokenType::SemiColon, error::EXPECT_SEMICOLON_AFTER_VARIABLE_DECLARATION);
+        self.chunk.add_op_define_global(index, token.line);
+    }
+
+    pub fn parse_variable(&mut self){
+        let token = self.previous.clone();
+        let index = self.chunk.add_value(Value::String(Rc::new(token.lexeme)));
+        self.chunk.add_op_get_global(index, token.line);
+    }
+
+    pub fn parse_declaration(&mut self){
+        match self.current.token_type {
+            TokenType::Var => {
+                self.advance();
+                self.parse_var_declaration();
+            }
+            _ => self.parse_statement()
+        }
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    pub fn synchronize(&mut self){
+        self.panic_mode = false;
+
+        loop {
+            match self.current.token_type {
+                TokenType::SemiColon => {
+                    self.advance();
+                    break;
+                },
+                TokenType::Class | TokenType::Fun |
+                TokenType::Var | TokenType::For |
+                TokenType::If | TokenType::While |
+                TokenType::Print | TokenType::Return => break,
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
     pub fn parse_prefix(&mut self) {
         let token = self.previous.clone();
         match token.token_type {
@@ -212,7 +291,9 @@ impl Compiler {
             TokenType::Number => self.parse_number(),
             TokenType::True | TokenType::False | TokenType::Nil =>self.parse_literal(),
             TokenType::String => self.parse_string(),
-            _ => {panic!("Error prefix parse")}
+            _ => {
+                self.show_error(token, error::EXPECT_EXPRESSION);
+            }
         }
     }
 
@@ -224,5 +305,18 @@ impl Compiler {
             TokenType::Less | TokenType::LessEqual => self.parse_binary(),
             _ => {panic!("Error infix parse")}
         }
+    }
+
+    pub fn match_token(&mut self,token_type:TokenType) -> bool{
+        if !self.check(token_type){
+            false
+        } else {
+            self.advance();
+            true
+        }
+    }
+
+    pub fn check(&mut self,token_type:TokenType)->bool{
+        self.current.token_type == token_type
     }
 }

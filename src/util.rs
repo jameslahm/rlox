@@ -29,6 +29,6 @@ macro_rules! binary_op {
                 continue;
             }
         }
-        return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER));
+        return Err(VmError::RuntimeError(error::OPERAND_MUST_BE_NUMBER.to_owned()));
     };
 }

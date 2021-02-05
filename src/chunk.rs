@@ -157,4 +157,24 @@ impl Chunk {
         self.codes.push(OpCode::OpLess);
         self.lines.push(line);
     }
+
+    pub fn add_op_print(&mut self,line:i32){
+        self.codes.push(OpCode::OpPrint);
+        self.lines.push(line);
+    }
+
+    pub fn add_op_define_global(&mut self,index:usize,line:i32){
+        self.codes.push(OpCode::OpDefineGlobal(index));
+        self.lines.push(line);
+    }
+
+    pub fn add_value(&mut self,value: Value) -> usize {
+        self.values.push(value);
+        self.values.len()-1
+    }
+
+    pub fn add_op_get_global(&mut self,index:usize,line:i32){
+        self.codes.push(OpCode::OpGetGlobal(index));
+        self.lines.push(line);
+    }
 }
