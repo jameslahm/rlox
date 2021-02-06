@@ -1,7 +1,5 @@
 use std::fmt;
 
-
-
 #[derive(Debug,Clone, Copy)]
 pub enum OpCode {
     OpReturn,
@@ -29,6 +27,10 @@ pub enum OpCode {
     OpJump(usize),
     OpLoop(usize),
     OpCall(usize),
+    OpGetUpValue(usize),
+    OpSetUpValue(usize),
+    OpClosure,
+    OpCloseUpvalue
 }
 
 impl fmt::Display for OpCode {
@@ -58,7 +60,10 @@ impl fmt::Display for OpCode {
             OpCode::OpJumpIfFalse(_)=>write!(f,"OpJumpIfFalse"),
             OpCode::OpJump(_) =>write!(f,"OpJump"),
             OpCode::OpLoop(_) =>write!(f,"OpLoop"),
-            OpCode::OpCall(_) => write!(f,"OpCall")
+            OpCode::OpCall(_) => write!(f,"OpCall"),
+            OpCode::OpGetUpValue(_)=>write!(f,"OpGetUpValue"),
+            OpCode::OpSetUpValue(_)=>write!(f,"OpSetUpValue"),
+            OpCode::OpClosure => write!(f,"OpClosure")
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }

@@ -3,7 +3,12 @@ use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use std::{ops::Add, rc::Rc, vec};
 
-use crate::{chunk::{Chunk, Closure, Function, Value}, error, scanner::Scanner, token::{Token, TokenType}};
+use crate::{
+    chunk::{Chunk, Closure, Function, Value},
+    error,
+    scanner::Scanner,
+    token::{Token, TokenType},
+};
 
 use crate::op_code::OpCode;
 
@@ -52,29 +57,50 @@ pub enum ParseError {
     ConsumeError(String),
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Local {
     pub name: String,
     pub depth: u32,
+    pub is_captured: bool,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UpValueMeta {
+    pub index: i32,
+    pub is_local: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Builder {
     pub chunk: Chunk,
     pub scope_depth: u32,
     pub locals: Vec<Local>,
+    pub parent: Option<Box<Builder>>,
+    pub upvalues: Vec<UpValueMeta>,
 }
 
 impl Builder {
-    fn new(name: String) -> Builder {
+    fn new(name: String, parent: Box<Builder>) -> Builder {
         let mut builder = Builder {
-            chunk:Chunk::new(),
-            scope_depth:0,
-            locals:vec![]
+            parent: Some(parent),
+            ..Default::default()
         };
         builder.locals.push(Local {
             name: name,
             depth: 0,
+            is_captured: false,
+        });
+        builder
+    }
+    fn default(name: String) -> Builder {
+        let mut builder = Builder {
+            parent: None,
+            ..Default::default()
+        };
+        builder.locals.push(Local {
+            name: name,
+            depth: 0,
+            is_captured: false,
         });
         builder
     }
@@ -86,7 +112,7 @@ pub struct Compiler {
     pub scanner: Scanner,
     pub panic_mode: bool,
     pub errors: Vec<ParseError>,
-    pub builder: Builder,
+    pub builder: Box<Builder>,
 }
 
 impl Compiler {
@@ -97,17 +123,22 @@ impl Compiler {
             panic_mode: false,
             scanner: Scanner::new(source),
             errors: vec![],
-            builder: Builder::new("".to_owned()),
+            builder: Box::new(Builder::default("".to_owned())),
         }
     }
 
-    pub fn compile(&mut self) -> Function {
+    pub fn compile(&mut self) -> Closure {
         self.advance();
         while !self.match_token(TokenType::Eof) {
             self.parse_declaration();
         }
         self.consume(TokenType::Eof, error::EXPECT_EOF);
-        Function::new(0,self.builder.chunk.clone(),"".to_owned())
+        Closure::new(Rc::new(Function::new(
+            0,
+            self.builder.chunk.clone(),
+            "".to_owned(),
+            vec![],
+        )))
     }
 
     pub fn advance(&mut self) {
@@ -279,8 +310,8 @@ impl Compiler {
         }
     }
 
-    pub fn parse_return_statement(&mut self){
-        if self.match_token(TokenType::SemiColon){
+    pub fn parse_return_statement(&mut self) {
+        if self.match_token(TokenType::SemiColon) {
             self.builder.chunk.add_op_nil(self.previous.line);
             self.builder.chunk.add_op_return(self.previous.line);
         } else {
@@ -415,8 +446,12 @@ impl Compiler {
     pub fn exit_scope(&mut self) {
         self.builder.scope_depth -= 1;
         while self.builder.locals[self.builder.locals.len() - 1].depth > self.builder.scope_depth {
-            self.builder.locals.remove(self.builder.locals.len());
-            self.builder.chunk.add_op_pop(self.previous.line);
+            if self.builder.locals[self.builder.locals.len()-1].is_captured {
+                self.builder.chunk.add_op_close_value(self.previous.line);
+            } else{
+                self.builder.chunk.add_op_pop(self.previous.line);
+            }
+            self.builder.locals.remove(self.builder.locals.len()-1);
         }
     }
 
@@ -466,6 +501,7 @@ impl Compiler {
         self.builder.locals.push(Local {
             name: token.lexeme,
             depth: self.builder.scope_depth,
+            is_captured: false,
         })
     }
 
@@ -530,6 +566,52 @@ impl Compiler {
         }
     }
 
+    pub fn resolve_upvalue(&mut self, name: &str) -> i32 {
+        if let None = self.builder.parent {
+            return -1;
+        }
+        let origin_builder = self.builder.clone();
+        self.builder = origin_builder.parent.as_ref().unwrap().clone();
+        let local_index = self.resolve_local(name).map(|v| v as i32).unwrap_or(-1);
+        self.builder = origin_builder.clone();
+
+        if local_index != -1 {
+            self.builder.parent.as_mut().unwrap().locals[local_index as usize].is_captured=true;
+            return self.add_upvalue(local_index, true);
+        }
+
+        let origin_builder = self.builder.clone();
+        self.builder = origin_builder.parent.as_ref().unwrap().clone();
+        let upvalue_index = self.resolve_upvalue(name);
+        self.builder = origin_builder.clone();
+
+        if upvalue_index != -1 {
+            return self.add_upvalue(upvalue_index, false);
+        }
+
+        return -1;
+    }
+
+    pub fn add_upvalue(&mut self, index: i32, is_local: bool) -> i32 {
+        let upvalue_count = self.builder.upvalues.len();
+
+        let upvalue_index = self
+            .builder
+            .upvalues
+            .iter()
+            .position(|v| v.is_local == is_local && v.index == index);
+
+        if let Some(i) = upvalue_index {
+            return i as i32;
+        }
+
+        self.builder.upvalues.push(UpValueMeta {
+            is_local: is_local,
+            index: index,
+        });
+        return upvalue_count as i32;
+    }
+
     pub fn parse_func_declaration(&mut self) {
         self.consume(TokenType::Identifier, error::EXPECT_FUNCTION_NAME);
         let token = self.previous.clone();
@@ -538,7 +620,7 @@ impl Compiler {
         }
 
         let origin_builder = self.builder.clone();
-        self.builder = Builder::new(token.lexeme.clone());
+        self.builder = Box::new(Builder::new(token.lexeme.clone(), origin_builder));
 
         self.enter_scope();
 
@@ -574,12 +656,18 @@ impl Compiler {
 
         self.exit_scope();
 
-        let function: Function = Function::new(arity, self.builder.chunk.clone(), token.lexeme.clone());
+        let function: Function = Function::new(
+            arity,
+            self.builder.chunk.clone(),
+            token.lexeme.clone(),
+            self.builder.upvalues.clone(),
+        );
 
-        self.builder = origin_builder;
+        self.builder = self.builder.parent.as_ref().unwrap().clone();
         self.builder
             .chunk
-            .add_op_constant(Value::Closure(Rc::new(Closure::new(Rc::new(function)))), self.previous.line);
+            .add_op_constant(Value::Function(Rc::new(function)), self.previous.line);
+        self.builder.chunk.add_op_closure(self.previous.line);
         if self.builder.scope_depth == 0 {
             self.define_global_variable(token.clone());
         }
@@ -691,14 +779,16 @@ impl Compiler {
             loop {
                 self.parse_expression();
                 arg_count += 1;
-                if !self.match_token(TokenType::Comma){
+                if !self.match_token(TokenType::Comma) {
                     break;
                 }
             }
         }
-        self.consume(TokenType::RightParen,error::EXPECT_RIGHT_PAREN_AFTER_ARG);
+        self.consume(TokenType::RightParen, error::EXPECT_RIGHT_PAREN_AFTER_ARG);
 
-        self.builder.chunk.add_op_call(arg_count, self.previous.line);
+        self.builder
+            .chunk
+            .add_op_call(arg_count, self.previous.line);
     }
 
     pub fn match_token(&mut self, token_type: TokenType) -> bool {

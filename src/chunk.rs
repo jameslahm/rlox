@@ -5,34 +5,56 @@ use std::{
     rc::Rc,
 };
 
-use crate::op_code::OpCode;
+use crate::{compiler::UpValueMeta, op_code::OpCode};
 
 #[derive(Debug, Clone)]
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: String,
+    pub upvalues:Vec<UpValueMeta>
 }
 
-#[derive(Debug,Clone)]
-pub struct Closure {
-    pub function:Rc<Function>
+#[derive(Debug,Clone, Copy)]
+pub struct UpValue{
+    pub location:usize,
+    pub is_hoist:bool
 }
+
+impl UpValue {
+    pub fn new(location:usize)->UpValue{
+        UpValue{
+            location:location,
+            is_hoist:false
+        }
+    }
+}
+
+
+
+#[derive(Debug)]
+pub struct Closure {
+    pub function:Rc<Function>,
+    pub upvalues:Vec<UpValue>
+}
+
 
 impl Closure {
     pub fn new(function:Rc<Function>) -> Closure {
         Closure {
-            function:function
+            function:function,
+            upvalues:vec![]
         }
     }
 }
 
 impl Function {
-    pub fn new(arity: usize, chunk: Chunk, name: String) -> Function {
+    pub fn new(arity: usize, chunk: Chunk, name: String,upvalues:Vec<UpValueMeta>) -> Function {
         Function {
             arity: arity,
             chunk: chunk,
             name: name,
+            upvalues:upvalues
         }
     }
 }
@@ -51,6 +73,7 @@ pub enum Value {
     Bool(bool),
     Double(f64),
     Nil,
+    Function(Rc<Function>),
     String(Rc<String>),
     NativeFunction(Box<fn()->Value>),
     Closure(Rc<Closure>)
@@ -97,12 +120,13 @@ impl Display for Value {
             Value::Nil => write!(f, "Nil"),
             Value::String(b) => write!(f, "{}", b),
             Value::NativeFunction(function)=>write!(f,"{:?}",function),
-            Value::Closure(function)=>write!(f,"{:?}",function)
+            Value::Closure(function)=>write!(f,"{:?}",function),
+            Value::Function(function)=>write!(f,"{:?}",function)
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Default)]
 pub struct Chunk {
     pub codes: Vec<OpCode>,
     pub values: Vec<Value>,
@@ -265,6 +289,14 @@ impl Chunk {
     }
     pub fn add_op_call(&mut self, arg_count: usize, line: i32) {
         self.codes.push(OpCode::OpCall(arg_count));
+        self.lines.push(line);
+    }
+    pub fn add_op_closure(&mut self,line:i32){
+        self.codes.push(OpCode::OpClosure);
+        self.lines.push(line);
+    }
+    pub fn add_op_close_value(&mut self,line:i32){
+        self.codes.push(OpCode::OpCloseUpvalue);
         self.lines.push(line);
     }
 }

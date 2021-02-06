@@ -1,12 +1,13 @@
 use std::{cell::RefCell, result};
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{chunk::Closure, op_code::OpCode};
+use crate::{chunk::{Closure, UpValue}, compiler::UpValueMeta, op_code::OpCode};
 use crate::{binary_op, chunk::Value};
 use crate::{error};
 
 pub struct VM {
     pub stack: Rc<RefCell<Vec<Value>>>,
+    pub heap: Vec<Value>,
     pub globals: HashMap<String, Value>,
     pub frames: Vec<CallFrame>,
 }
@@ -64,12 +65,13 @@ impl VM {
             stack: Rc::new(RefCell::new(vec![])),
             globals: HashMap::new(),
             frames: vec![],
+            heap:vec![]
         }
     }
     pub fn interpret(&mut self, closure: Rc<Closure>) -> Result<()> {
         let global_frame = CallFrame::new(closure, self.stack.clone(), 0);
         self.frames.push(global_frame);
-
+        let mut heap = &mut self.heap;
         let mut frame = &mut self.frames[0];
         while frame.ip < frame.closure.function.chunk.codes.len() {
             let code = frame.closure.function.chunk.codes[frame.ip];
@@ -254,11 +256,53 @@ impl VM {
                         frame = & mut self.frames[frame_len-1];
                     }
                 }
+                OpCode::OpClosure => {
+                    let value = frame.get_stack_value()?;
+                    if let Value::Function(function)=value {
+                        let mut closure = Closure::new(function.clone());
+                        for upvalue_meta in function.upvalues.iter() {
+                            let is_local = upvalue_meta.is_local;
+                            let index = upvalue_meta.index;
+                            if is_local {
+                                VM::capture_upvalue(frame.base + index as usize);
+                            } else {
+                                closure.upvalues.push(frame.closure.upvalues[index as usize]);
+                            }
+                        }
+
+                        frame.slots.borrow_mut().push(Value::Closure(Rc::new(closure)));
+                    } else{
+                        return Err(VmError::RuntimeError("Error not a function".to_owned()));
+                    }
+                }
+                OpCode::OpGetUpValue(index)=>{
+                    let upvalue = frame.closure.upvalues[index];
+                    if !upvalue.is_hoist {
+                        let value = frame.slots.borrow()[upvalue.location].clone();
+                        frame.slots.borrow_mut().push(value);
+                    } else {
+                        let value = heap[upvalue.location].clone();
+                        frame.slots.borrow_mut().push(value);
+                    }
+                }
+                OpCode::OpSetUpValue(index)=>{
+                    let upvalue = frame.closure.upvalues[index];
+                    let value = frame.peek(0);
+                    if !upvalue.is_hoist {
+                        frame.slots.borrow_mut()[upvalue.location] = value;
+                    } else {
+                        heap[upvalue.location] = value;
+                    }
+                }
                 
             }
             frame.ip += 1;
         }
 
         Ok(())
+    }
+
+    pub fn capture_upvalue(index:usize) -> UpValue {
+        UpValue::new(index)
     }
 }
