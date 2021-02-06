@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::{fmt::Display, vec};
 use std::{
     fmt::{Formatter, Result},
@@ -8,13 +9,13 @@ use crate::op_code::OpCode;
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub arity: i32,
+    pub arity: usize,
     pub chunk: Chunk,
     pub name: String,
 }
 
 impl Function {
-    pub fn new(arity: i32, chunk: Chunk, name: String) -> Function {
+    pub fn new(arity: usize, chunk: Chunk, name: String) -> Function {
         Function {
             arity: arity,
             chunk: chunk,
@@ -39,6 +40,7 @@ pub enum Value {
     Nil,
     String(Rc<String>),
     Function(Rc<Function>),
+    NativeFunction(Box<fn()->Value>),
 }
 
 impl PartialEq for Value {

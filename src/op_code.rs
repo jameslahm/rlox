@@ -28,7 +28,7 @@ pub enum OpCode {
     OpJumpIfFalse(usize),
     OpJump(usize),
     OpLoop(usize),
-    OpCall(usize)
+    OpCall(usize),
 }
 
 impl fmt::Display for OpCode {

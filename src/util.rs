@@ -21,7 +21,7 @@ macro_rules! binary_op {
     ($self:ident,$val_type:ident,$op:tt) => {
         if let Value::Double(right_v) = $self.peek(0) {
             if let Value::Double(left_v) = $self.peek(1) {
-                $self.slots.push(Value::$val_type(left_v $op right_v));
+                $self.slots.borrow_mut().push(Value::$val_type(left_v $op right_v));
                 // Pop values
                 $self.get_stack_value()?;
                 $self.get_stack_value()?;

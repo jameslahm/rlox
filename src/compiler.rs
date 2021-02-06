@@ -277,7 +277,21 @@ impl Compiler {
                 self.advance();
                 self.parse_for_statement();
             }
+            TokenType::Return => {
+                self.parse_return_statement();
+            }
             _ => self.parse_expression_statement(),
+        }
+    }
+
+    pub fn parse_return_statement(&mut self){
+        if self.match_token(TokenType::SemiColon){
+            self.builder.chunk.add_op_nil(self.previous.line);
+            self.builder.chunk.add_op_return(self.previous.line);
+        } else {
+            self.parse_expression();
+            self.consume(TokenType::SemiColon, error::EXPECT_SEMICOLON_AFTER_RETURN);
+            self.builder.chunk.add_op_return(self.previous.line);
         }
     }
 
@@ -559,6 +573,9 @@ impl Compiler {
             error::EXPECT_LEFT_BRACE_BEFORE_FUNCTION_BODY,
         );
         self.parse_block_statement();
+
+        self.builder.chunk.add_op_nil(self.previous.line);
+        self.builder.chunk.add_op_return(self.previous.line);
 
         self.exit_scope();
 

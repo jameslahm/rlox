@@ -25,3 +25,4 @@ pub const EXPECT_RIGHT_PAREN_AFTER_PARAMETERS: &str = "Expect ')' after paramete
 pub const EXPECT_LEFT_BRACE_BEFORE_FUNCTION_BODY: &str = "Expect '{' before function body";
 pub const EXPECT_PARAMETER_NAME: &str = "Expect parameter name";
 pub const EXPECT_RIGHT_PAREN_AFTER_ARG: &str = "Expect ')' after arguments";
+pub const EXPECT_SEMICOLON_AFTER_RETURN:&str = "Expect ';' after return value";
