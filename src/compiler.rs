@@ -1,12 +1,10 @@
-use core::{panic, panicking::panic};
+use core::panic;
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
-
-use std::{fs::create_dir, process::exit, rc::Rc};
-use std::{ops::Add, vec};
+use std::{ops::Add, rc::Rc, vec};
 
 use crate::{
-    chunk::{Chunk, Value},
+    chunk::{Chunk, Function, Value},
     error,
     scanner::Scanner,
     token::{Token, TokenType},
@@ -63,15 +61,29 @@ pub struct Local {
     pub depth: u32,
 }
 
+pub struct Builder {
+    pub chunk: Chunk,
+    pub scope_depth: u32,
+    pub locals: Vec<Local>,
+}
+
+impl Builder {
+    fn new() -> Builder {
+        Builder {
+            chunk: Chunk::new(),
+            scope_depth: 0,
+            locals: vec![],
+        }
+    }
+}
+
 pub struct Compiler {
     pub previous: Token,
     pub current: Token,
     pub scanner: Scanner,
     pub panic_mode: bool,
     pub errors: Vec<ParseError>,
-    pub chunk: Chunk,
-    pub scope_depth: u32,
-    pub locals: Vec<Local>,
+    pub builder: Builder,
 }
 
 impl Compiler {
@@ -82,9 +94,7 @@ impl Compiler {
             panic_mode: false,
             scanner: Scanner::new(source),
             errors: vec![],
-            chunk: Chunk::new(),
-            scope_depth: 0,
-            locals: vec![],
+            builder: Builder::new(),
         }
     }
 
@@ -135,7 +145,9 @@ impl Compiler {
     pub fn parse_number(&mut self) {
         let v: f64 = self.previous.lexeme.parse().unwrap_or(0.0);
         let value = Value::Double(v);
-        self.chunk.add_op_constant(value, self.previous.line);
+        self.builder
+            .chunk
+            .add_op_constant(value, self.previous.line);
     }
 
     pub fn parse_group(&mut self) {
@@ -152,10 +164,10 @@ impl Compiler {
 
         match token.token_type {
             TokenType::Minus => {
-                self.chunk.add_op_negate(token.line);
+                self.builder.chunk.add_op_negate(token.line);
             }
             TokenType::Bang => {
-                self.chunk.add_op_not(token.line);
+                self.builder.chunk.add_op_not(token.line);
             }
             _ => {}
         }
@@ -167,30 +179,30 @@ impl Compiler {
         let precedence: Precedence = token.token_type.into();
         self.parse_precedence(precedence);
         match token.token_type {
-            TokenType::Plus => self.chunk.add_op_add(token.line),
-            TokenType::Minus => self.chunk.add_op_subtract(token.line),
-            TokenType::Star => self.chunk.add_op_multily(token.line),
-            TokenType::Slash => self.chunk.add_op_divide(token.line),
+            TokenType::Plus => self.builder.chunk.add_op_add(token.line),
+            TokenType::Minus => self.builder.chunk.add_op_subtract(token.line),
+            TokenType::Star => self.builder.chunk.add_op_multily(token.line),
+            TokenType::Slash => self.builder.chunk.add_op_divide(token.line),
             TokenType::BangEqual => {
-                self.chunk.add_op_equal(token.line);
-                self.chunk.add_op_not(token.line);
+                self.builder.chunk.add_op_equal(token.line);
+                self.builder.chunk.add_op_not(token.line);
             }
             TokenType::EqualEqual => {
-                self.chunk.add_op_equal(token.line);
+                self.builder.chunk.add_op_equal(token.line);
             }
             TokenType::Greater => {
-                self.chunk.add_op_greater(token.line);
+                self.builder.chunk.add_op_greater(token.line);
             }
             TokenType::GreaterEqual => {
-                self.chunk.add_op_less(token.line);
-                self.chunk.add_op_not(token.line);
+                self.builder.chunk.add_op_less(token.line);
+                self.builder.chunk.add_op_not(token.line);
             }
             TokenType::Less => {
-                self.chunk.add_op_less(token.line);
+                self.builder.chunk.add_op_less(token.line);
             }
             TokenType::LessEqual => {
-                self.chunk.add_op_greater(token.line);
-                self.chunk.add_op_not(token.line);
+                self.builder.chunk.add_op_greater(token.line);
+                self.builder.chunk.add_op_not(token.line);
             }
             _ => {}
         }
@@ -199,9 +211,9 @@ impl Compiler {
     pub fn parse_literal(&mut self) {
         let token = self.previous.clone();
         match token.token_type {
-            TokenType::False => self.chunk.add_op_false(token.line),
-            TokenType::True => self.chunk.add_op_true(token.line),
-            TokenType::Nil => self.chunk.add_op_nil(token.line),
+            TokenType::False => self.builder.chunk.add_op_false(token.line),
+            TokenType::True => self.builder.chunk.add_op_true(token.line),
+            TokenType::Nil => self.builder.chunk.add_op_nil(token.line),
             _ => {}
         }
     }
@@ -212,7 +224,8 @@ impl Compiler {
 
     pub fn parse_string(&mut self) {
         let token = self.previous.clone();
-        self.chunk
+        self.builder
+            .chunk
             .add_op_constant(Value::String(Rc::new(token.lexeme)), token.line);
     }
 
@@ -259,47 +272,54 @@ impl Compiler {
         }
     }
 
-    pub fn parse_for_statement(&mut self){
+    pub fn parse_for_statement(&mut self) {
         self.enter_scope();
         self.consume(TokenType::LeftParen, error::EXPECT_LEFT_PAREN_AFTER_FOR);
         if self.match_token(TokenType::SemiColon) {
-        } else if self.match_token(TokenType::Var){
+        } else if self.match_token(TokenType::Var) {
             self.parse_var_declaration();
-        } else{
+        } else {
             self.parse_expression_statement();
         }
 
-        let exit_index:i32= -1;
-        let condition_index = self.chunk.codes.len();
+        let mut exit_index: i32 = -1;
+        let condition_index = self.builder.chunk.codes.len();
         if !self.match_token(TokenType::SemiColon) {
             self.parse_expression();
             self.consume(TokenType::SemiColon, error::EXPECT_SEMICOLON_AFTER_LOOP);
 
-            exit_index = self.chunk.add_op_juml_if_false(0, self.previous.line) as i32;
-            self.chunk.add_op_pop(self.previous.line);
+            exit_index = self
+                .builder
+                .chunk
+                .add_op_juml_if_false(0, self.previous.line) as i32;
+            self.builder.chunk.add_op_pop(self.previous.line);
         }
 
-        let incre_index = self.chunk.codes.len();
+        let incre_index = self.builder.chunk.codes.len();
 
-        if !self.match_token(TokenType::RightParen){
-            let body_index = self.chunk.add_op_jump(0, self.previous.line);
+        if !self.match_token(TokenType::RightParen) {
+            let body_index = self.builder.chunk.add_op_jump(0, self.previous.line);
             self.parse_expression();
-            self.chunk.add_op_pop(self.previous.line);
-            self.chunk.add_op_loop(condition_index,self.previous.line);
+            self.builder.chunk.add_op_pop(self.previous.line);
+            self.builder
+                .chunk
+                .add_op_loop(condition_index, self.previous.line);
             self.patch_op(body_index);
         }
 
-        self.chunk.add_op_loop(incre_index,self.previous.line);
+        self.builder
+            .chunk
+            .add_op_loop(incre_index, self.previous.line);
 
-        if exit_index!=-1 {
+        if exit_index != -1 {
             self.patch_op(exit_index as usize);
-            self.chunk.add_op_pop(self.previous.line);
+            self.builder.chunk.add_op_pop(self.previous.line);
         }
         self.exit_scope();
     }
-    
+
     pub fn parse_while_statement(&mut self) {
-        let loop_index = self.chunk.codes.len();
+        let loop_index = self.builder.chunk.codes.len();
 
         self.consume(TokenType::LeftParen, error::EXPECT_LEFT_PAREN_AFTER_WHILE);
         self.parse_expression();
@@ -308,13 +328,19 @@ impl Compiler {
             error::EXPECT_RIGHT_PAREN_AFTER_CONDITION,
         );
 
-        let exit_index = self.chunk.add_op_juml_if_false(0, self.previous.line);
-        self.chunk.add_op_pop(self.previous.line);
+        let exit_index = self
+            .builder
+            .chunk
+            .add_op_juml_if_false(0, self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
         self.parse_statement();
-        self.chunk.add_op_loop(self.chunk.codes.len()-loop_index, self.previous.line);
+        self.builder.chunk.add_op_loop(
+            self.builder.chunk.codes.len() - loop_index,
+            self.previous.line,
+        );
 
         self.patch_op(exit_index);
-        self.chunk.add_op_pop(self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
     }
 
     pub fn parse_if_statement(&mut self) {
@@ -325,14 +351,17 @@ impl Compiler {
             error::EXPECT_RIGHT_PAREN_AFTER_CONDITION,
         );
 
-        let then_index = self.chunk.add_op_juml_if_false(0, self.previous.line);
-        self.chunk.add_op_pop(self.previous.line);
+        let then_index = self
+            .builder
+            .chunk
+            .add_op_juml_if_false(0, self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
         self.parse_statement();
 
-        let else_index = self.chunk.add_op_jump(0, self.previous.line);
+        let else_index = self.builder.chunk.add_op_jump(0, self.previous.line);
 
         self.patch_op(then_index);
-        self.chunk.add_op_pop(self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
 
         if self.match_token(TokenType::Else) {
             self.parse_statement();
@@ -341,13 +370,14 @@ impl Compiler {
     }
 
     pub fn patch_op(&mut self, index: usize) {
-        let mut op = &self.chunk.codes[index];
+        let code_len = self.builder.chunk.codes.len();
+        let op = &mut self.builder.chunk.codes[index];
         match op {
             OpCode::OpJumpIfFalse(ref mut offset) => {
-                *offset = self.chunk.codes.len() - index;
+                *offset = code_len - index;
             }
             OpCode::OpJump(ref mut offset) => {
-                *offset = self.chunk.codes.len() - index;
+                *offset = code_len - index;
             }
             _ => {
                 panic!("Path not jump")
@@ -362,13 +392,13 @@ impl Compiler {
         self.consume(TokenType::RightBrace, error::EXPECT_RIGHT_BRACE_AFTER_BLOCK);
     }
     pub fn enter_scope(&mut self) {
-        self.scope_depth += 1;
+        self.builder.scope_depth += 1;
     }
     pub fn exit_scope(&mut self) {
-        self.scope_depth -= 1;
-        while self.locals[self.locals.len() - 1].depth > self.scope_depth {
-            self.locals.remove(self.locals.len());
-            self.chunk.add_op_pop(self.previous.line);
+        self.builder.scope_depth -= 1;
+        while self.builder.locals[self.builder.locals.len() - 1].depth > self.builder.scope_depth {
+            self.builder.locals.remove(self.builder.locals.len());
+            self.builder.chunk.add_op_pop(self.previous.line);
         }
     }
 
@@ -385,7 +415,7 @@ impl Compiler {
         self.consume(TokenType::SemiColon, error::EXPECT_SEMICOLON_AFTER_VALUE);
 
         let token = self.previous.clone();
-        self.chunk.add_op_print(token.line);
+        self.builder.chunk.add_op_print(token.line);
     }
 
     pub fn parse_var_declaration(&mut self) {
@@ -396,33 +426,50 @@ impl Compiler {
         if self.match_token(TokenType::Equal) {
             self.parse_expression();
         } else {
-            self.chunk.add_op_nil(token.line);
+            self.builder.chunk.add_op_nil(token.line);
         }
 
         self.consume(
             TokenType::SemiColon,
             error::EXPECT_SEMICOLON_AFTER_VARIABLE_DECLARATION,
         );
-        if self.scope_depth == 0 {
-            let index = self.chunk.add_value(Value::String(Rc::new(token.lexeme)));
-            self.chunk.add_op_define_global(index, token.line);
+
+        self.define_variable(token);
+    }
+
+    pub fn define_local_variable(&mut self, token: Token) {
+        match self.resolve_local(token.lexeme.as_str()) {
+            Some(_) => {
+                self.show_error(token, error::ALREADY_VARIABLE_DELCARE);
+                return;
+            }
+            None => {}
+        };
+        self.builder.locals.push(Local {
+            name: token.lexeme,
+            depth: self.builder.scope_depth,
+        })
+    }
+
+    pub fn define_global_variable(&mut self, token: Token) {
+        let index = self
+            .builder
+            .chunk
+            .add_value(Value::String(Rc::new(token.lexeme)));
+        self.builder.chunk.add_op_define_global(index, token.line);
+    }
+
+    pub fn define_variable(&mut self, token: Token) {
+        if self.builder.scope_depth == 0 {
+            self.define_global_variable(token);
         } else {
-            match self.resolve_local(token.lexeme.as_str()) {
-                Some(_) => {
-                    self.show_error(token, error::ALREADY_VARIABLE_DELCARE);
-                    return;
-                }
-                None => {}
-            };
-            self.locals.push(Local {
-                name: token.lexeme,
-                depth: self.scope_depth,
-            })
+            self.define_local_variable(token);
         }
     }
 
     pub fn resolve_local(&mut self, name: &str) -> Option<usize> {
-        self.locals
+        self.builder
+            .locals
             .iter()
             .rev()
             .position(|local| if local.name == name { true } else { false })
@@ -437,20 +484,83 @@ impl Compiler {
 
         // ? Handle global
         if index == -1 {
-            let global_index = self.chunk.add_value(Value::String(Rc::new(token.lexeme)));
+            let global_index = self
+                .builder
+                .chunk
+                .add_value(Value::String(Rc::new(token.lexeme)));
             if precedence <= Precedence::Assignment && self.match_token(TokenType::Equal) {
                 self.parse_expression();
-                self.chunk.add_op_set_global(global_index, token.line);
+                self.builder
+                    .chunk
+                    .add_op_set_global(global_index, token.line);
                 return;
             }
-            self.chunk.add_op_get_global(global_index, token.line);
+            self.builder
+                .chunk
+                .add_op_get_global(global_index, token.line);
         } else {
             if precedence <= Precedence::Assignment && self.match_token(TokenType::Equal) {
                 self.parse_expression();
-                self.chunk.add_op_set_local(index as usize, token.line);
+                self.builder
+                    .chunk
+                    .add_op_set_local(index as usize, token.line);
                 return;
             }
-            self.chunk.add_op_get_local(index as usize, token.line);
+            self.builder
+                .chunk
+                .add_op_get_local(index as usize, token.line);
+        }
+    }
+
+    pub fn parse_func_declaration(&mut self) {
+        self.consume(TokenType::Identifier, error::EXPECT_FUNCTION_NAME);
+        let token = self.previous.clone();
+        if self.builder.scope_depth != 0 {
+            self.define_variable(token);
+        }
+
+        let origin_builder = self.builder;
+        self.builder = Builder::new();
+
+        self.enter_scope();
+
+        self.consume(
+            TokenType::LeftParen,
+            error::EXPECT_LEFT_PAREN_AFTER_FUNCTION,
+        );
+        let mut arity = 0;
+        if !self.check(TokenType::RightParen) {
+            loop {
+                arity += 1;
+                self.consume(TokenType::Identifier, error::EXPECT_PARAMETER_NAME);
+                self.define_local_variable(self.previous);
+                if !self.match_token(TokenType::Comma){
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            TokenType::RightParen,
+            error::EXPECT_RIGHT_PAREN_AFTER_PARAMETERS,
+        );
+
+        self.consume(
+            TokenType::LeftBrace,
+            error::EXPECT_LEFT_BRACE_BEFORE_FUNCTION_BODY,
+        );
+        self.parse_block_statement();
+
+        self.exit_scope();
+
+        let function: Function = Function::new(0, self.builder.chunk, token.lexeme);
+
+        self.builder = origin_builder;
+        self.builder
+            .chunk
+            .add_op_constant(Value::Function(Rc::new(function)), self.previous.line);
+        if self.builder.scope_depth == 0 {
+            self.define_global_variable(token);
         }
     }
 
@@ -459,6 +569,10 @@ impl Compiler {
             TokenType::Var => {
                 self.advance();
                 self.parse_var_declaration();
+            }
+            TokenType::Fun => {
+                self.advance();
+                self.parse_func_declaration()
             }
             _ => self.parse_statement(),
         }
@@ -506,8 +620,11 @@ impl Compiler {
     }
 
     pub fn parse_and(&mut self) {
-        let then_index = self.chunk.add_op_juml_if_false(0, self.previous.line);
-        self.chunk.add_op_pop(self.previous.line);
+        let then_index = self
+            .builder
+            .chunk
+            .add_op_juml_if_false(0, self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
 
         self.parse_precedence(Precedence::And);
 
@@ -515,10 +632,13 @@ impl Compiler {
     }
 
     pub fn parse_or(&mut self) {
-        let else_index = self.chunk.add_op_juml_if_false(0, self.previous.line);
-        let then_index = self.chunk.add_op_jump(0, self.previous.line);
+        let else_index = self
+            .builder
+            .chunk
+            .add_op_juml_if_false(0, self.previous.line);
+        let then_index = self.builder.chunk.add_op_jump(0, self.previous.line);
         self.patch_op(else_index);
-        self.chunk.add_op_pop(self.previous.line);
+        self.builder.chunk.add_op_pop(self.previous.line);
         self.parse_precedence(Precedence::Or);
         self.patch_op(then_index);
     }

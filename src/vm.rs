@@ -30,7 +30,7 @@ impl<'a> VM<'a> {
         }
     }
     pub fn interpret(&mut self) -> Result<()> {
-        let code_index = 0;
+        let mut code_index = 0;
         while code_index < self.chunk.codes.len() {
             let code = &self.chunk.codes[code_index];
             self.show_stack();

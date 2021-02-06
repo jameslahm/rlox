@@ -7,11 +7,38 @@ use std::{
 use crate::op_code::OpCode;
 
 #[derive(Debug, Clone)]
+pub struct Function {
+    arity: i32,
+    chunk: Chunk,
+    name: String,
+}
+
+impl Function {
+    pub fn new(arity: i32, chunk: Chunk, name: String) -> Function {
+        Function {
+            arity: arity,
+            chunk: chunk,
+            name: name,
+        }
+    }
+}
+
+pub struct CallFrame<'a> {
+    pub functinon: Rc<Function>,
+    pub ip: i32,
+    pub slots: &'a Vec<Value>,
+
+    // stack base
+    pub base: i32,
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Bool(bool),
     Double(f64),
     Nil,
     String(Rc<String>),
+    Function(Rc<Function>),
 }
 
 impl PartialEq for Value {
@@ -54,10 +81,12 @@ impl Display for Value {
             Value::Double(v) => write!(f, "Double {}", v),
             Value::Nil => write!(f, "Nil"),
             Value::String(b) => write!(f, "{}", b),
+            Value::Function(function) => write!(f, "{:?}", function),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub codes: Vec<OpCode>,
     pub values: Vec<Value>,
@@ -213,7 +242,7 @@ impl Chunk {
         return self.codes.len() - 1;
     }
 
-    pub fn add_op_loop(&mut self,index: usize,line: i32) -> usize {
+    pub fn add_op_loop(&mut self, index: usize, line: i32) -> usize {
         self.codes.push(OpCode::OpLoop(index));
         self.lines.push(line);
         return self.codes.len() - 1;
