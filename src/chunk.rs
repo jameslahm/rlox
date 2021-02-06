@@ -14,6 +14,19 @@ pub struct Function {
     pub name: String,
 }
 
+#[derive(Debug,Clone)]
+pub struct Closure {
+    pub function:Rc<Function>
+}
+
+impl Closure {
+    pub fn new(function:Rc<Function>) -> Closure {
+        Closure {
+            function:function
+        }
+    }
+}
+
 impl Function {
     pub fn new(arity: usize, chunk: Chunk, name: String) -> Function {
         Function {
@@ -39,8 +52,8 @@ pub enum Value {
     Double(f64),
     Nil,
     String(Rc<String>),
-    Function(Rc<Function>),
     NativeFunction(Box<fn()->Value>),
+    Closure(Rc<Closure>)
 }
 
 impl PartialEq for Value {
@@ -83,7 +96,8 @@ impl Display for Value {
             Value::Double(v) => write!(f, "Double {}", v),
             Value::Nil => write!(f, "Nil"),
             Value::String(b) => write!(f, "{}", b),
-            Value::Function(function) => write!(f, "{:?}", function),
+            Value::NativeFunction(function)=>write!(f,"{:?}",function),
+            Value::Closure(function)=>write!(f,"{:?}",function)
         }
     }
 }

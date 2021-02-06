@@ -1,9 +1,9 @@
 use std::{cell::RefCell, result};
 use std::{collections::HashMap, rc::Rc};
 
-use crate::op_code::OpCode;
+use crate::{chunk::Closure, op_code::OpCode};
 use crate::{binary_op, chunk::Value};
-use crate::{chunk::Function, error};
+use crate::{error};
 
 pub struct VM {
     pub stack: Rc<RefCell<Vec<Value>>>,
@@ -12,16 +12,16 @@ pub struct VM {
 }
 
 pub struct CallFrame {
-    pub function: Rc<Function>,
+    pub closure: Rc<Closure>,
     pub ip: usize,
     pub slots: Rc<RefCell<Vec<Value>>>,
     pub base: usize,
 }
 
 impl<'a> CallFrame {
-    fn new(function: Rc<Function>, stack: Rc<RefCell<Vec<Value>>>, base: usize) -> CallFrame {
+    fn new(closure: Rc<Closure>, stack: Rc<RefCell<Vec<Value>>>, base: usize) -> CallFrame {
         CallFrame {
-            function: function,
+            closure: closure,
             ip: 0,
             slots: stack,
             base: base,
@@ -66,18 +66,18 @@ impl VM {
             frames: vec![],
         }
     }
-    pub fn interpret(&mut self, function: Rc<Function>) -> Result<()> {
-        let global_frame = CallFrame::new(function, self.stack.clone(), 0);
+    pub fn interpret(&mut self, closure: Rc<Closure>) -> Result<()> {
+        let global_frame = CallFrame::new(closure, self.stack.clone(), 0);
         self.frames.push(global_frame);
 
         let mut frame = &mut self.frames[0];
-        while frame.ip < frame.function.chunk.codes.len() {
-            let code = frame.function.chunk.codes[frame.ip];
+        while frame.ip < frame.closure.function.chunk.codes.len() {
+            let code = frame.closure.function.chunk.codes[frame.ip];
             frame.show_stack();
-            frame.function.chunk.disassemble_op_code(&code, frame.ip);
+            frame.closure.function.chunk.disassemble_op_code(&code, frame.ip);
             match code {
                 OpCode::OpConstant(index) => {
-                    let value = frame.function.chunk.values[index].clone();
+                    let value = frame.closure.function.chunk.values[index].clone();
                     frame.slots.borrow_mut().push(value);
                 }
                 OpCode::OpNegate => {
@@ -148,7 +148,7 @@ impl VM {
                     frame.get_stack_value()?;
                 }
                 OpCode::OpDefineGlobal(index) => {
-                    let name_value = frame.function.chunk.values[index].clone();
+                    let name_value = frame.closure.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
                         let value = frame.get_stack_value()?;
                         self.globals.insert((*name).clone(), value);
@@ -157,7 +157,7 @@ impl VM {
                     }
                 }
                 OpCode::OpGetGlobal(index) => {
-                    let name_value = frame.function.chunk.values[index].clone();
+                    let name_value = frame.closure.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
                         let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
                         let value = self
@@ -170,7 +170,7 @@ impl VM {
                     }
                 }
                 OpCode::OpSetGlobal(index) => {
-                    let name_value = frame.function.chunk.values[index].clone();
+                    let name_value = frame.closure.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
                         let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
                         let assign_value = frame.get_stack_value()?;
@@ -211,7 +211,8 @@ impl VM {
                 OpCode::OpCall(arg_count) => {
                     let value = frame.peek(arg_count);
                     match value {
-                        Value::Function(function) => {
+                        Value::Closure(closure) => {
+                            let function = &closure.function;
                             if function.arity != arg_count {
                                 return Err(VmError::RuntimeError(format!(
                                     "Expected {} arguments but got {}",
@@ -219,7 +220,7 @@ impl VM {
                                 )))
                             }
                             let new_frame = CallFrame::new(
-                                function.clone(),
+                                closure.clone(),
                                 self.stack.clone(),
                                 self.stack.borrow().len() - arg_count - 1,
                             );
@@ -253,6 +254,7 @@ impl VM {
                         frame = & mut self.frames[frame_len-1];
                     }
                 }
+                
             }
             frame.ip += 1;
         }

@@ -3,12 +3,7 @@ use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use std::{ops::Add, rc::Rc, vec};
 
-use crate::{
-    chunk::{Chunk, Function, Value},
-    error,
-    scanner::Scanner,
-    token::{Token, TokenType},
-};
+use crate::{chunk::{Chunk, Closure, Function, Value}, error, scanner::Scanner, token::{Token, TokenType}};
 
 use crate::op_code::OpCode;
 
@@ -584,7 +579,7 @@ impl Compiler {
         self.builder = origin_builder;
         self.builder
             .chunk
-            .add_op_constant(Value::Function(Rc::new(function)), self.previous.line);
+            .add_op_constant(Value::Closure(Rc::new(Closure::new(Rc::new(function)))), self.previous.line);
         if self.builder.scope_depth == 0 {
             self.define_global_variable(token.clone());
         }
