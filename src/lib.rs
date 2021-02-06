@@ -18,7 +18,7 @@ pub fn run_file(filename: &String) {
     let mut buf = String::new();
     file.read_to_string(&mut buf).expect("Could not read file");
     let compiler = Compiler::new(buf);
-    compiler.chunk.disassemble("Code");
+    compiler.builder.chunk.disassemble("Code");
 }
 
 #[cfg(test)]

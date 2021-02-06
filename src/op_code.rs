@@ -27,7 +27,8 @@ pub enum OpCode {
     OpSetLocal(usize),
     OpJumpIfFalse(usize),
     OpJump(usize),
-    OpLoop(usize)
+    OpLoop(usize),
+    OpCall(usize)
 }
 
 impl fmt::Display for OpCode {
@@ -56,7 +57,8 @@ impl fmt::Display for OpCode {
             OpCode::OpSetLocal(_) => write!(f,"OpSetLocal"),
             OpCode::OpJumpIfFalse(_)=>write!(f,"OpJumpIfFalse"),
             OpCode::OpJump(_) =>write!(f,"OpJump"),
-            OpCode::OpLoop(_) =>write!(f,"OpLoop")
+            OpCode::OpLoop(_) =>write!(f,"OpLoop"),
+            OpCode::OpCall(_) => write!(f,"OpCall")
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }

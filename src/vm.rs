@@ -1,17 +1,56 @@
 use std::result;
 use std::{collections::HashMap, rc::Rc};
 
-use crate::error;
 use crate::op_code::OpCode;
 use crate::{
     binary_op,
-    chunk::{Chunk, Value},
+    chunk::{Value},
 };
+use crate::{chunk::Function, error};
 
 pub struct VM<'a> {
-    pub chunk: &'a Chunk,
     pub stack: Vec<Value>,
     pub globals: HashMap<String, Value>,
+    pub frames: Vec<CallFrame<'a>>,
+}
+
+pub struct CallFrame<'a> {
+    pub function: Function,
+    pub ip: usize,
+    pub slots: &'a mut Vec<Value>,
+    pub base: usize,
+}
+
+impl<'a> CallFrame<'a> {
+    fn new(function: Function, stack: &'a mut Vec<Value>, base: usize) -> CallFrame {
+        CallFrame {
+            function: function,
+            ip: 0,
+            slots: stack,
+            base: base,
+        }
+    }
+    pub fn show_stack(&self) {
+        print!("        ");
+        for value in self.slots.iter() {
+            print!("[ {} ]", value)
+        }
+        println!()
+    }
+
+    pub fn get_stack_value(&mut self) -> Result<Value> {
+        self.slots
+            .pop()
+            .ok_or(VmError::RuntimeError(error::EMPTY_STACK.to_owned()))
+    }
+
+    pub fn peek(&self, distance: usize) -> Value {
+        let slots_len = self.slots.len();
+        if slots_len < distance + 1 {
+            panic!("Error peek slots")
+        }
+        self.slots[self.slots.len() - 1 - distance].clone()
+    }
 }
 
 pub enum VmError {
@@ -22,29 +61,32 @@ pub enum VmError {
 pub type Result<T> = result::Result<T, VmError>;
 
 impl<'a> VM<'a> {
-    pub fn new(chunk: &'a Chunk) -> Self {
+    pub fn new() -> Self {
         VM {
-            chunk: chunk,
             stack: vec![],
             globals: HashMap::new(),
+            frames: vec![],
         }
     }
-    pub fn interpret(&mut self) -> Result<()> {
-        let mut code_index = 0;
-        while code_index < self.chunk.codes.len() {
-            let code = &self.chunk.codes[code_index];
-            self.show_stack();
-            self.chunk.disassemble_op_code(code, code_index);
+    pub fn interpret(&'a mut self, function: Function) -> Result<()> {
+        let global_frame = CallFrame::new(function, &mut self.stack, 0);
+        self.frames.push(global_frame);
+
+        let mut frame = & mut self.frames[0];
+        while frame.ip < frame.function.chunk.codes.len() {
+            let code = frame.function.chunk.codes[frame.ip];
+            frame.show_stack();
+            frame.function.chunk.disassemble_op_code(&code, frame.ip);
             match code {
                 OpCode::OpReturn => {}
                 OpCode::OpConstant(index) => {
-                    let value = self.chunk.values[*index].clone();
-                    self.stack.push(value);
+                    let value = frame.function.chunk.values[index].clone();
+                    frame.slots.push(value);
                 }
                 OpCode::OpNegate => {
-                    let value = self.get_stack_value()?;
+                    let value = frame.get_stack_value()?;
                     if let Value::Double(v) = value {
-                        self.stack.push(Value::Double(-v))
+                        frame.slots.push(Value::Double(-v))
                     } else {
                         return Err(VmError::RuntimeError(
                             error::OPERAND_MUST_BE_NUMBER.to_owned(),
@@ -52,139 +94,123 @@ impl<'a> VM<'a> {
                     }
                 }
                 OpCode::OpAdd => {
-                    if let Value::String(left_v) = self.peek(0) {
-                        if let Value::String(right_v) = self.peek(1) {
-                            self.get_stack_value()?;
-                            self.get_stack_value()?;
+                    if let Value::String(left_v) = frame.peek(0) {
+                        if let Value::String(right_v) = frame.peek(1) {
+                            frame.get_stack_value()?;
+                            frame.get_stack_value()?;
 
-                            self.stack
+                            frame.slots
                                 .push(Value::String(Rc::new((*left_v).clone() + &right_v)));
                         }
                     } else {
-                        binary_op!(self,Double,+);
+                        binary_op!(frame,Double,+);
                     }
                 }
                 OpCode::OpSubtract => {
-                    binary_op!(self,Double,-);
+                    binary_op!(frame,Double,-);
                 }
                 OpCode::OpMultiply => {
-                    binary_op!(self,Double,*);
+                    binary_op!(frame,Double,*);
                 }
                 OpCode::OpDivide => {
-                    binary_op!(self,Double,/);
+                    binary_op!(frame,Double,/);
                 }
                 OpCode::OpNil => {
-                    self.stack.push(Value::Nil);
+                    frame.slots.push(Value::Nil);
                 }
                 OpCode::OpTrue => {
-                    self.stack.push(Value::Bool(true));
+                    frame.slots.push(Value::Bool(true));
                 }
                 OpCode::OpFalse => {
-                    self.stack.push(Value::Bool(false));
+                    frame.slots.push(Value::Bool(false));
                 }
                 OpCode::OpNot => {
-                    let boolean: bool = self.get_stack_value()?.into();
-                    self.stack.push(Value::Bool(boolean));
+                    let boolean: bool = frame.get_stack_value()?.into();
+                    frame.slots.push(Value::Bool(boolean));
                 }
                 OpCode::OpEqual => {
-                    let left_value = self.get_stack_value()?;
-                    let right_value = self.get_stack_value()?;
-                    self.stack.push(Value::Bool(left_value == right_value));
+                    let left_value = frame.get_stack_value()?;
+                    let right_value = frame.get_stack_value()?;
+                    frame.slots.push(Value::Bool(left_value == right_value));
                 }
                 OpCode::OpGreater => {
-                    binary_op!(self,Bool,>);
+                    binary_op!(frame,Bool,>);
                 }
                 OpCode::OpLess => {
-                    binary_op!(self,Bool,<);
+                    binary_op!(frame,Bool,<);
                 } // _ => println!("Executing {}", code),
                 OpCode::OpPrint => {
-                    println!("{}", self.get_stack_value()?);
+                    println!("{}", frame.get_stack_value()?);
                 }
                 OpCode::OpPop => {
-                    self.get_stack_value()?;
+                    frame.get_stack_value()?;
                 }
                 OpCode::OpDefineGlobal(index) => {
-                    let name_value = self.chunk.values[*index].clone();
+                    let name_value = frame.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
-                        let value = self.get_stack_value()?;
+                        let value = frame.get_stack_value()?;
                         self.globals.insert((*name).clone(), value);
                     } else {
                         panic!(error::WARN_GLOBAL_BE_STRING);
                     }
                 }
                 OpCode::OpGetGlobal(index) => {
-                    let name_value = self.chunk.values[*index].clone();
+                    let name_value = frame.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
                         let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
                         let value = self
                             .globals
                             .get(&(*name))
                             .ok_or(VmError::RuntimeError(message))?;
-                        self.stack.push(value.clone());
+                        frame.slots.push(value.clone());
                     } else {
                         panic!(error::WARN_GLOBAL_BE_STRING);
                     }
                 }
                 OpCode::OpSetGlobal(index) => {
-                    let name_value = self.chunk.values[*index].clone();
+                    let name_value = frame.function.chunk.values[index].clone();
                     if let Value::String(name) = name_value {
                         let message = format!("{} {}", error::UNDEFINED_VARIABLE, name);
-                        let assign_value = self.get_stack_value()?;
+                        let assign_value = frame.get_stack_value()?;
                         let value = self
                             .globals
                             .get_mut(&(*name))
                             .ok_or(VmError::RuntimeError(message))?;
                         *value = assign_value;
-                        self.stack.push(value.clone());
+                        frame.slots.push(value.clone());
                     } else {
                         panic!(error::WARN_GLOBAL_BE_STRING);
                     }
                 }
                 OpCode::OpGetLocal(index) => {
-                    self.stack.push(self.stack[*index].clone());
+                    frame.slots.push(frame.slots[frame.base + index].clone());
                 }
                 OpCode::OpSetLocal(index) => {
-                    self.stack[*index] = self.peek(0);
+                    frame.slots[frame.base + index] = frame.peek(0);
                 }
-                OpCode::OpJumpIfFalse(index)=>{
-                    let boolean:bool = self.peek(0).into();
+                OpCode::OpJumpIfFalse(index) => {
+                    let boolean: bool = frame.peek(0).into();
                     if !boolean {
-                        code_index+=index;
+                        frame.ip += index;
                         continue;
                     }
                 }
-                OpCode::OpJump(index)=>{
-                    code_index += index;
+                OpCode::OpJump(index) => {
+                    frame.ip += index;
                     continue;
                 }
-                OpCode::OpLoop(index)=>{
-                    code_index -= index;
+                OpCode::OpLoop(index) => {
+                    frame.ip -= index;
                     continue;
                 }
+                _ =>{}
             }
-            code_index += 1;
+            frame.ip += 1;
         }
 
         Ok(())
     }
-    pub fn show_stack(&self) {
-        print!("        ");
-        for value in self.stack.iter() {
-            print!("[ {} ]", value)
-        }
-        println!()
-    }
-    pub fn get_stack_value(&mut self) -> Result<Value> {
-        self.stack
-            .pop()
-            .ok_or(VmError::RuntimeError(error::EMPTY_STACK.to_owned()))
-    }
+    
 
-    pub fn peek(&self, distance: usize) -> Value {
-        let stack_len = self.stack.len();
-        if stack_len < distance + 1 {
-            panic!("Error peek stack")
-        }
-        self.stack[self.stack.len() - 1 - distance].clone()
-    }
+    
 }

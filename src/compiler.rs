@@ -45,6 +45,7 @@ impl From<TokenType> for Precedence {
             TokenType::BangEqual | TokenType::EqualEqual => Precedence::Equality,
             TokenType::Greater | TokenType::GreaterEqual => Precedence::Comparison,
             TokenType::Less | TokenType::LessEqual => Precedence::Comparison,
+            TokenType::LeftParen => Precedence::Call,
             _ => Precedence::None,
         }
     }
@@ -56,11 +57,13 @@ pub enum ParseError {
     ConsumeError(String),
 }
 
+#[derive(Debug,Clone)]
 pub struct Local {
     pub name: String,
     pub depth: u32,
 }
 
+#[derive(Debug,Clone)]
 pub struct Builder {
     pub chunk: Chunk,
     pub scope_depth: u32,
@@ -68,12 +71,17 @@ pub struct Builder {
 }
 
 impl Builder {
-    fn new() -> Builder {
-        Builder {
-            chunk: Chunk::new(),
-            scope_depth: 0,
-            locals: vec![],
-        }
+    fn new(name: String) -> Builder {
+        let mut builder = Builder {
+            chunk:Chunk::new(),
+            scope_depth:0,
+            locals:vec![]
+        };
+        builder.locals.push(Local {
+            name: name,
+            depth: 0,
+        });
+        builder
     }
 }
 
@@ -94,16 +102,17 @@ impl Compiler {
             panic_mode: false,
             scanner: Scanner::new(source),
             errors: vec![],
-            builder: Builder::new(),
+            builder: Builder::new("".to_owned()),
         }
     }
 
-    pub fn compile(&mut self) {
+    pub fn compile(&mut self) -> Function {
         self.advance();
         while !self.match_token(TokenType::Eof) {
             self.parse_declaration();
         }
         self.consume(TokenType::Eof, error::EXPECT_EOF);
+        Function::new(0,self.builder.chunk.clone(),"".to_owned())
     }
 
     pub fn advance(&mut self) {
@@ -516,11 +525,11 @@ impl Compiler {
         self.consume(TokenType::Identifier, error::EXPECT_FUNCTION_NAME);
         let token = self.previous.clone();
         if self.builder.scope_depth != 0 {
-            self.define_variable(token);
+            self.define_variable(token.clone());
         }
 
-        let origin_builder = self.builder;
-        self.builder = Builder::new();
+        let origin_builder = self.builder.clone();
+        self.builder = Builder::new(token.lexeme.clone());
 
         self.enter_scope();
 
@@ -533,8 +542,8 @@ impl Compiler {
             loop {
                 arity += 1;
                 self.consume(TokenType::Identifier, error::EXPECT_PARAMETER_NAME);
-                self.define_local_variable(self.previous);
-                if !self.match_token(TokenType::Comma){
+                self.define_local_variable(self.previous.clone());
+                if !self.match_token(TokenType::Comma) {
                     break;
                 }
             }
@@ -553,14 +562,14 @@ impl Compiler {
 
         self.exit_scope();
 
-        let function: Function = Function::new(0, self.builder.chunk, token.lexeme);
+        let function: Function = Function::new(arity, self.builder.chunk.clone(), token.lexeme.clone());
 
         self.builder = origin_builder;
         self.builder
             .chunk
             .add_op_constant(Value::Function(Rc::new(function)), self.previous.line);
         if self.builder.scope_depth == 0 {
-            self.define_global_variable(token);
+            self.define_global_variable(token.clone());
         }
     }
 
@@ -657,10 +666,27 @@ impl Compiler {
             | TokenType::LessEqual => self.parse_binary(),
             TokenType::And => self.parse_and(),
             TokenType::Or => self.parse_or(),
+            TokenType::LeftParen => self.parse_call(),
             _ => {
                 panic!("Error infix parse")
             }
         }
+    }
+
+    pub fn parse_call(&mut self) {
+        let mut arg_count = 0;
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.parse_expression();
+                arg_count += 1;
+                if !self.match_token(TokenType::Comma){
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen,error::EXPECT_RIGHT_PAREN_AFTER_ARG);
+
+        self.builder.chunk.add_op_call(arg_count, self.previous.line);
     }
 
     pub fn match_token(&mut self, token_type: TokenType) -> bool {

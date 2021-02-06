@@ -8,9 +8,9 @@ use crate::op_code::OpCode;
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    arity: i32,
-    chunk: Chunk,
-    name: String,
+    pub arity: i32,
+    pub chunk: Chunk,
+    pub name: String,
 }
 
 impl Function {
@@ -246,5 +246,9 @@ impl Chunk {
         self.codes.push(OpCode::OpLoop(index));
         self.lines.push(line);
         return self.codes.len() - 1;
+    }
+    pub fn add_op_call(&mut self, arg_count: usize, line: i32) {
+        self.codes.push(OpCode::OpCall(arg_count));
+        self.lines.push(line);
     }
 }
