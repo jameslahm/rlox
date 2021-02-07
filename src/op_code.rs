@@ -63,7 +63,8 @@ impl fmt::Display for OpCode {
             OpCode::OpCall(_) => write!(f,"OpCall"),
             OpCode::OpGetUpValue(_)=>write!(f,"OpGetUpValue"),
             OpCode::OpSetUpValue(_)=>write!(f,"OpSetUpValue"),
-            OpCode::OpClosure => write!(f,"OpClosure")
+            OpCode::OpClosure => write!(f,"OpClosure"),
+            OpCode::OpCloseUpvalue => write!(f,"OpCloseUpvalue")
             // _ => write!(f, "Unknown OpCode...\n"),
         }
     }

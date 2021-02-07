@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug};
 use std::{fmt::Display, vec};
 use std::{
     fmt::{Formatter, Result},
@@ -35,7 +35,7 @@ impl UpValue {
 #[derive(Debug)]
 pub struct Closure {
     pub function:Rc<Function>,
-    pub upvalues:Vec<UpValue>
+    pub upvalues:Vec<Rc<RefCell<UpValue>>>
 }
 
 

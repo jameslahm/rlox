@@ -1,17 +1,26 @@
-use std::{cell::RefCell, result};
+use std::{
+    cell::{Ref, RefCell},
+    result,
+};
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{chunk::{Closure, UpValue}, compiler::UpValueMeta, op_code::OpCode};
+use crate::error;
 use crate::{binary_op, chunk::Value};
-use crate::{error};
+use crate::{
+    chunk::{Closure, UpValue},
+    compiler::UpValueMeta,
+    op_code::OpCode,
+};
 
 pub struct VM {
     pub stack: Rc<RefCell<Vec<Value>>>,
     pub heap: Vec<Value>,
     pub globals: HashMap<String, Value>,
     pub frames: Vec<CallFrame>,
+    pub upvalues: Vec<Rc<RefCell<UpValue>>>,
 }
 
+#[derive(Debug, Clone)]
 pub struct CallFrame {
     pub closure: Rc<Closure>,
     pub ip: usize,
@@ -65,18 +74,22 @@ impl VM {
             stack: Rc::new(RefCell::new(vec![])),
             globals: HashMap::new(),
             frames: vec![],
-            heap:vec![]
+            heap: vec![],
+            upvalues: vec![],
         }
     }
     pub fn interpret(&mut self, closure: Rc<Closure>) -> Result<()> {
         let global_frame = CallFrame::new(closure, self.stack.clone(), 0);
         self.frames.push(global_frame);
-        let mut heap = &mut self.heap;
         let mut frame = &mut self.frames[0];
         while frame.ip < frame.closure.function.chunk.codes.len() {
             let code = frame.closure.function.chunk.codes[frame.ip];
             frame.show_stack();
-            frame.closure.function.chunk.disassemble_op_code(&code, frame.ip);
+            frame
+                .closure
+                .function
+                .chunk
+                .disassemble_op_code(&code, frame.ip);
             match code {
                 OpCode::OpConstant(index) => {
                     let value = frame.closure.function.chunk.values[index].clone();
@@ -219,7 +232,7 @@ impl VM {
                                 return Err(VmError::RuntimeError(format!(
                                     "Expected {} arguments but got {}",
                                     function.arity, arg_count
-                                )))
+                                )));
                             }
                             let new_frame = CallFrame::new(
                                 closure.clone(),
@@ -231,7 +244,7 @@ impl VM {
                             frame = &mut self.frames[frame_len - 1];
                             continue;
                         }
-                        Value::NativeFunction(function)=>{
+                        Value::NativeFunction(function) => {
                             let value = function();
                             frame.get_stack_value()?;
                             frame.slots.borrow_mut().push(value);
@@ -244,65 +257,106 @@ impl VM {
                 OpCode::OpReturn => {
                     let value = frame.get_stack_value()?;
                     let base = frame.base;
+
+                    while base <= frame.slots.borrow().len() {
+                        let raw_index = frame.slots.borrow().len() - 1;
+                        let value = frame.get_stack_value()?;
+                        self.heap.push(value);
+                        let index = self.heap.len() - 1;
+                        let upvalue = self
+                            .upvalues
+                            .iter()
+                            .find(|&e| raw_index == e.borrow().location)
+                            .unwrap();
+                        upvalue.borrow_mut().is_hoist = true;
+                        upvalue.borrow_mut().location = index;
+                    }
+
                     self.stack.borrow_mut().drain(base..);
 
                     self.stack.borrow_mut().push(value);
 
                     self.frames.pop();
                     let frame_len = self.frames.len();
-                    if frame_len==0 {
-                        return  Ok(());
+                    if frame_len == 0 {
+                        return Ok(());
                     } else {
-                        frame = & mut self.frames[frame_len-1];
+                        frame = &mut self.frames[frame_len - 1];
                     }
                 }
                 OpCode::OpClosure => {
                     let value = frame.get_stack_value()?;
-                    if let Value::Function(function)=value {
+                    if let Value::Function(function) = value {
                         let mut closure = Closure::new(function.clone());
                         for upvalue_meta in function.upvalues.iter() {
                             let is_local = upvalue_meta.is_local;
                             let index = upvalue_meta.index;
                             if is_local {
-                                VM::capture_upvalue(frame.base + index as usize);
+                                let res = match self
+                                    .upvalues
+                                    .iter()
+                                    .find(|&v| v.borrow().location == index as usize)
+                                {
+                                    Some(v) => v.clone(),
+                                    None => {
+                                        self.upvalues.push(Rc::new(RefCell::new(UpValue::new(
+                                            index as usize,
+                                        ))));
+                                        self.upvalues.last().unwrap().clone()
+                                    }
+                                };
+                                closure.upvalues.push(res);
                             } else {
-                                closure.upvalues.push(frame.closure.upvalues[index as usize]);
+                                closure
+                                    .upvalues
+                                    .push(frame.closure.upvalues[index as usize].clone());
                             }
                         }
 
-                        frame.slots.borrow_mut().push(Value::Closure(Rc::new(closure)));
-                    } else{
+                        frame
+                            .slots
+                            .borrow_mut()
+                            .push(Value::Closure(Rc::new(closure)));
+                    } else {
                         return Err(VmError::RuntimeError("Error not a function".to_owned()));
                     }
                 }
-                OpCode::OpGetUpValue(index)=>{
-                    let upvalue = frame.closure.upvalues[index];
-                    if !upvalue.is_hoist {
-                        let value = frame.slots.borrow()[upvalue.location].clone();
+                OpCode::OpGetUpValue(index) => {
+                    let upvalue = frame.closure.upvalues[index].clone();
+                    if !upvalue.borrow().is_hoist {
+                        let value = frame.slots.borrow()[upvalue.borrow().location].clone();
                         frame.slots.borrow_mut().push(value);
                     } else {
-                        let value = heap[upvalue.location].clone();
+                        let value = self.heap[upvalue.borrow().location].clone();
                         frame.slots.borrow_mut().push(value);
                     }
                 }
-                OpCode::OpSetUpValue(index)=>{
-                    let upvalue = frame.closure.upvalues[index];
+                OpCode::OpSetUpValue(index) => {
+                    let upvalue = frame.closure.upvalues[index].clone();
                     let value = frame.peek(0);
-                    if !upvalue.is_hoist {
-                        frame.slots.borrow_mut()[upvalue.location] = value;
+                    if !upvalue.borrow().is_hoist {
+                        frame.slots.borrow_mut()[upvalue.borrow().location] = value;
                     } else {
-                        heap[upvalue.location] = value;
+                        self.heap[upvalue.borrow().location] = value;
                     }
                 }
-                
+                OpCode::OpCloseUpvalue => {
+                    let raw_index = frame.slots.borrow().len() - 1;
+                    let value = frame.get_stack_value()?;
+                    self.heap.push(value);
+                    let index = self.heap.len() - 1;
+                    let upvalue = self
+                        .upvalues
+                        .iter()
+                        .find(|&e| raw_index == e.borrow().location)
+                        .unwrap();
+                    upvalue.borrow_mut().is_hoist = true;
+                    upvalue.borrow_mut().location = index;
+                }
             }
             frame.ip += 1;
         }
 
         Ok(())
-    }
-
-    pub fn capture_upvalue(index:usize) -> UpValue {
-        UpValue::new(index)
     }
 }
